@@ -1,0 +1,42 @@
+repos:
+  # Black - code formatter
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        name: "Format code with Black"
+        description: "Automatically format Python code"
+
+  # Ruff - linting and import sorting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.13.0
+    hooks:
+      - id: ruff
+        name: "Lint with Ruff"
+        description: "Lint and sort imports"
+        args: [--fix, --exit-non-zero-on-fix]
+
+  # Mypy - static type checker
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.1
+    hooks:
+      - id: mypy
+        args: [--strict, --ignore-missing-imports]
+
+  # Builtin pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: "Remove trailing whitespace"
+      - id: end-of-file-fixer
+        name: "Ensure files end with newline"
+      - id: check-yaml
+        name: "Validate YAML files"
+      - id: check-toml
+        name: "Validate TOML files"
+      - id: check-added-large-files
+        name: "Prevent large files from being committed"
+        args: ["--maxkb=1000"]
+      - id: check-merge-conflict
+        name: "Check for merge conflict markers"
