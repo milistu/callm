@@ -64,7 +64,6 @@ class APIRequest:
         Returns:
             None
         """
-        logger.info(f"Starting request #{self.task_id}")
         error: Optional[object] = None
         payload: Optional[dict[str, JSONValue]] = None
 

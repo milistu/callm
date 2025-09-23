@@ -1,11 +1,11 @@
 import asyncio
 import json
-import sys
 import time
 
 from aiohttp import ClientSession
 from asyncio import Queue
 from loguru import logger
+from tqdm import tqdm
 from tiktoken import get_encoding
 
 from callm.modules import APIRequest, StatusTracker
@@ -46,7 +46,7 @@ async def process_api_requests_from_file(
     """
     # Initialize logging
     logger.remove()
-    logger.add(sys.stderr, level=logging_level)
+    logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level=logging_level)
     logger.debug(f"Logging initialized at level {logging_level}")
 
     # Initialize tokenizer
@@ -73,9 +73,19 @@ async def process_api_requests_from_file(
 
     logger.debug("Initialization complete.")
 
+    # Count total for progress bar
+    try:
+        with open(requests_file, "r", encoding="utf-8") as _f:
+            total_requests = sum(1 for _ in _f)
+    except Exception:
+        total_requests = 0
+
     with open(requests_file) as file:
         requests = file.__iter__()
         logger.debug("File opened. Entering main loop.")
+
+        # Create a single tqdm progress bar at the bottom
+        pbar = tqdm(total=total_requests or None, desc="Starting requests", unit="req")
 
         async with ClientSession() as session:
             while True:
@@ -99,6 +109,7 @@ async def process_api_requests_from_file(
                             )
                             status_tracker.num_tasks_started += 1
                             status_tracker.num_tasks_in_progress += 1
+                            pbar.update(1)
                             logger.debug(
                                 f"Reading request {next_request.task_id}: {next_request}"
                             )
@@ -165,6 +176,7 @@ async def process_api_requests_from_file(
                         f"Pausing to cool down until {time.ctime(status_tracker.time_of_last_rate_limit_error + SECONDS_TO_PAUSE_AFTER_RATE_LIMIT_ERROR)}"
                     )
 
+        pbar.close()
         logger.info(f"Parallel processing complete. Results saved to {save_file}")
         if status_tracker.num_tasks_failed > 0:
             logger.warning(
