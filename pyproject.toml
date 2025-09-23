@@ -8,6 +8,7 @@ dependencies = [
     "aiohttp>=3.12.15",
     "loguru>=0.7.3",
     "tiktoken>=0.11.0",
+    "tqdm>=4.67.1",
 ]
 
 [project.scripts]
@@ -20,4 +21,5 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "pre-commit>=4.3.0",
+    "python-dotenv>=1.1.1",
 ]
