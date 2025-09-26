@@ -55,5 +55,5 @@ def append_to_jsonl(
         None
     """
     json_string = json.dumps(data)
-    with open(file, "a") as f:
+    with open(file, mode="a", encoding="utf-8") as f:
         f.write(json_string + "\n")
