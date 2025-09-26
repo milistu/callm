@@ -25,6 +25,7 @@ async def process_api_requests_from_file(
     token_encoding_name: str,
     max_attempts: int = 5,
     logging_level: int = 20,
+    *,  # keyword-only arguments
     save_file: str | None = None,
     error_file: str | None = None,
 ) -> None:
@@ -96,7 +97,7 @@ async def process_api_requests_from_file(
     except Exception:
         total_requests = 0
 
-    with open(requests_file) as file:
+    with open(requests_file, mode="r", encoding="utf-8") as file:
         requests = file.__iter__()
         logger.debug("File opened. Entering main loop.")
 
