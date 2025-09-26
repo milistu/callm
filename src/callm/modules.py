@@ -48,6 +48,7 @@ class APIRequest:
         request_header: dict[str, str],
         retry_queue: Queue["APIRequest"],
         save_file: str,
+        error_file: str,
         status_tracker: StatusTracker,
     ) -> None:
         """
@@ -59,6 +60,7 @@ class APIRequest:
             request_header: (dict) - the header to use to make the API call
             retry_queue (Queue): the queue to use to retry failed requests
             save_file (str): the file to save the results to
+            error_file (str): the file to save the errors to
             status_tracker (StatusTracker): the tracker to use to track the status of the request
 
         Returns:
@@ -109,7 +111,7 @@ class APIRequest:
                     ]
                 else:
                     error_data = [self.request_json, [str(e) for e in self.result]]
-                append_to_jsonl(error_data, save_file)
+                append_to_jsonl(error_data, error_file)
                 status_tracker.num_tasks_in_progress -= 1
                 status_tracker.num_tasks_failed += 1
         else:

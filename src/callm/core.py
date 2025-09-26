@@ -18,28 +18,30 @@ SECONDS_TO_SLEEP_EACH_LOOP = 0.001
 
 async def process_api_requests_from_file(
     requests_file: str,
-    save_file: str,
     request_url: str,
     api_key: str,
     max_requests_per_minute: float,
     max_tokens_per_minute: float,
     token_encoding_name: str,
-    max_attempts: int,
-    logging_level: int,
+    max_attempts: int = 5,
+    logging_level: int = 20,
+    save_file: str | None = None,
+    error_file: str | None = None,
 ) -> None:
     """
     Process API requests in parallel, throttling to stay under rate limits.
 
     Args:
         requests_file (str): path to the file containing the requests to be processed
-        save_file (str): path to the file where the results will be saved
+        save_file (str): path to the file where the results will be saved (optional). If not provided, results will be saved to the file with the same name as the requests file, but with "_results.jsonl" appended to the name.
+        error_file (str): path to the file where the errors will be saved (optional). If not provided, errors will be saved to the file with the same name as the requests file, but with "_errors.jsonl" appended to the name.
         request_url (str): URL of the API endpoint to call
         api_key (str): API key to use
         max_requests_per_minute (float): target number of requests to make per minute (will make less if limited by tokens)
         max_tokens_per_minute (float): target number of tokens to use per minute (will use less if limited by requests)
         token_encoding_name (str): name of the token encoding used, as defined in the `tiktoken` package
-        max_attempts (int): number of times to retry a failed request before giving up
-        logging_level (int): level of logging to use; higher numbers will log fewer messages
+        max_attempts (int): number of times to retry a failed request before giving up (optional). Defaults to 5.
+        logging_level (int): level of logging to use; higher numbers will log fewer messages (optional). Defaults to 20 (INFO level).
 
     Returns:
         None
@@ -48,6 +50,20 @@ async def process_api_requests_from_file(
     logger.remove()
     logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level=logging_level)
     logger.debug(f"Logging initialized at level {logging_level}")
+
+    # Check and initialize files
+    if not requests_file.endswith(".jsonl"):
+        raise ValueError("Requests file must be a JSONL file")
+    if save_file is None:
+        save_file = requests_file.replace(".jsonl", "_results.jsonl")
+    else:
+        if not save_file.endswith(".jsonl"):
+            raise ValueError("Save file must be a JSONL file")
+    if error_file is None:
+        error_file = requests_file.replace(".jsonl", "_errors.jsonl")
+    else:
+        if not error_file.endswith(".jsonl"):
+            raise ValueError("Error file must be a JSONL file")
 
     # Initialize tokenizer
     tokenizer = get_encoding(token_encoding_name)
@@ -149,6 +165,7 @@ async def process_api_requests_from_file(
                                 request_header=request_header,
                                 retry_queue=queue_of_requests_to_retry,
                                 save_file=save_file,
+                                error_file=error_file,
                                 status_tracker=status_tracker,
                             )
                         )
@@ -180,7 +197,7 @@ async def process_api_requests_from_file(
         logger.info(f"Parallel processing complete. Results saved to {save_file}")
         if status_tracker.num_tasks_failed > 0:
             logger.warning(
-                f"{status_tracker.num_tasks_failed} / {status_tracker.num_tasks_started} requests failed. Errors logged to {save_file}"
+                f"{status_tracker.num_tasks_failed} / {status_tracker.num_tasks_started} requests failed. Errors logged to {error_file}"
             )
         if status_tracker.num_rate_limit_errors > 0:
             logger.warning(
