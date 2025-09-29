@@ -13,7 +13,7 @@ def num_tokens_consumed_from_request(
 ) -> int:
     """
     Count the number of tokens in the request.
-    Only supports `completion` and `embedding` requests.
+    Only supports `responses`, `completion` and `embedding` requests.
 
     Args:
         request_json (dict[str, Any]): the request json
@@ -63,6 +63,52 @@ def num_tokens_consumed_from_request(
         else:
             raise TypeError(
                 'Expecting either string or list of strings for "input" field in embedding request.'
+            )
+    elif api_endpoint == "responses":
+        input = request_json["input"]
+        if isinstance(input, str):  # single input string
+            num_tokens = len(tokenizer.encode(input))
+            return num_tokens
+        elif isinstance(
+            input, list
+        ):  # array of message objects (similar to chat completions)
+            num_tokens = 0
+            for item in input:
+                if isinstance(item, dict):
+                    # Handle message objects
+                    if "content" in item:
+                        content = item["content"]
+                        if isinstance(content, str):
+                            num_tokens += len(tokenizer.encode(content))
+                        elif isinstance(content, list):
+                            # Handle content array with different types (text, images, etc.)
+                            for content_item in content:
+                                if (
+                                    isinstance(content_item, dict)
+                                    and "text" in content_item
+                                ):
+                                    num_tokens += len(
+                                        tokenizer.encode(content_item["text"])
+                                    )
+                                elif (
+                                    isinstance(content_item, dict)
+                                    and content_item.get("type") == "input_text"
+                                ):
+                                    num_tokens += len(
+                                        tokenizer.encode(content_item["text"])
+                                    )
+                    # Add tokens for role and message structure overhead (similar to chat completions)
+                    num_tokens += 4  # every message follows similar structure
+                    for key, value in item.items():
+                        if key != "content" and isinstance(value, str):
+                            num_tokens += len(tokenizer.encode(value))
+                elif isinstance(item, str):
+                    # Handle simple string items in the array
+                    num_tokens += len(tokenizer.encode(item))
+            return num_tokens
+        else:
+            raise TypeError(
+                'Expecting either string or list for "input" field in responses request.'
             )
     else:
         raise NotImplementedError(
