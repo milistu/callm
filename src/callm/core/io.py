@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Generator
 
-from callm.utils import append_to_jsonl
+from callm.utils import RequestData, append_to_jsonl
 
 """
 JSONL file I/O utilities.
@@ -37,23 +37,23 @@ def stream_jsonl(filepath: str) -> Generator[dict[str, Any], None, None]:
             yield json.loads(line)
 
 
-def write_result(entry: list[dict[str, Any] | list[Any]], save_file: str) -> None:
+def write_result(entry: RequestData, save_file: str) -> None:
     """
     Write a successful result to the output file.
 
     Args:
-        entry (list[dict[str, Any] | list[Any]]): List containing [request, response, optional_metadata]
+        entry (RequestData): List containing [request, response, optional_metadata]
         save_file (str): Path to output JSONL file
     """
     append_to_jsonl(data=entry, file=save_file)
 
 
-def write_error(entry: list[dict[str, Any] | list[Any]], error_file: str) -> None:
+def write_error(entry: RequestData, error_file: str) -> None:
     """
     Write a failed request to the error file.
 
     Args:
-        entry (list[dict[str, Any] | list[Any]]): List containing [request, errors, optional_metadata]
+        entry (RequestData): List containing [request, errors, optional_metadata]
         error_file (str): Path to error JSONL file
     """
     append_to_jsonl(data=entry, file=error_file)
