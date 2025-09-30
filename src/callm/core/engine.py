@@ -50,6 +50,8 @@ class StatusTracker:
         num_api_errors (int): Count of other API errors (4xx, 5xx)
         num_other_errors (int): Count of network/parsing/unexpected errors
         time_of_last_rate_limit_error (float): Timestamp of most recent rate limit error
+        total_input_tokens (int): Sum of input tokens across all successful requests
+        total_output_tokens (int): Sum of output tokens across all successful requests
     """
 
     num_tasks_started: int = 0
@@ -60,6 +62,8 @@ class StatusTracker:
     num_api_errors: int = 0
     num_other_errors: int = 0
     time_of_last_rate_limit_error: float = 0.0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
 
 
 @dataclass
@@ -187,11 +191,22 @@ class APIRequest:
                 status.num_tasks_in_progress -= 1
                 return
 
+            # Extract usage metrics if available
+            usage = provider.extract_usage(payload)
+            if usage:
+                status.total_input_tokens += usage.input_tokens
+                status.total_output_tokens += usage.output_tokens
+                logger.debug(
+                    f"Task {self.task_id}: Completed successfully "
+                    f"(input: {usage.input_tokens}, output: {usage.output_tokens} tokens)"
+                )
+            else:
+                logger.debug(f"Task {self.task_id}: Completed successfully")
+
             success_data = self._format_success_data(payload)
             write_result(success_data, files.save_file)
             status.num_tasks_in_progress -= 1
             status.num_tasks_succeeded += 1
-            logger.debug(f"Task {self.task_id}: Completed successfully")
 
 
 async def _requeue_after(
@@ -365,12 +380,30 @@ async def process_api_requests_from_file(
                 )
 
     pbar.close()
+
+    # Log summary
     logger.info(f"Parallel processing complete. Results saved to {files.save_file}")
+    logger.info(
+        f"Successfully completed {status.num_tasks_succeeded}/{status.num_tasks_started} requests"
+    )
+
+    # Log usage statistics if available
+    if status.total_input_tokens > 0 or status.total_output_tokens > 0:
+        total_tokens = status.total_input_tokens + status.total_output_tokens
+        logger.info(
+            f"Token usage - Input: {status.total_input_tokens:,}, "
+            f"Output: {status.total_output_tokens:,}, "
+            f"Total: {total_tokens:,}"
+        )
+
+    # Log warnings for failures
     if status.num_tasks_failed > 0:
         logger.warning(
-            f"{status.num_tasks_failed} / {status.num_tasks_started} requests failed. Errors logged to {files.error_file}"
+            f"{status.num_tasks_failed} / {status.num_tasks_started} requests failed. "
+            f"Errors logged to {files.error_file}"
         )
     if status.num_rate_limit_errors > 0:
         logger.warning(
-            f"{status.num_rate_limit_errors} rate limit errors received. Consider running at lower rate."
+            f"{status.num_rate_limit_errors} rate limit errors received. "
+            f"Consider running at lower rate."
         )
