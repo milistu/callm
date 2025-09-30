@@ -116,6 +116,7 @@ class APIRequest:
         status: StatusTracker,
         backoff: Backoff,
         max_attempts: int,
+        pbar: tqdm,
     ) -> None:
         """
         Execute the API request with error handling and retry logic.
@@ -135,6 +136,7 @@ class APIRequest:
             status (StatusTracker): Shared status tracker for metrics
             backoff (Backoff): Backoff calculator for retry delays
             max_attempts (int): Maximum number of retry attempts
+            pbar (tqdm): Progress bar for tracking requests
         """
         error: Optional[Any] = None
         payload: Optional[dict[str, Any]] = None
@@ -182,6 +184,7 @@ class APIRequest:
                 write_error(error_data, files.error_file)
                 status.num_tasks_in_progress -= 1
                 status.num_tasks_failed += 1
+                pbar.update(1)
         else:
             if payload is None:
                 logger.error(
@@ -207,6 +210,7 @@ class APIRequest:
             write_result(success_data, files.save_file)
             status.num_tasks_in_progress -= 1
             status.num_tasks_succeeded += 1
+            pbar.update(1)
 
 
 async def _requeue_after(
@@ -292,7 +296,27 @@ async def process_api_requests_from_file(
 
     # Initialize logging
     logger.remove()
-    logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level=logging_level)
+    # Show module info only at DEBUG level
+    if logging_level <= 10:  # DEBUG level
+        log_format = (
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{line}</cyan> | "
+            "<level>{message}</level>"
+        )
+    else:  # INFO and above: clean format
+        log_format = (
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <8}</level> | "
+            "<level>{message}</level>"
+        )
+
+    logger.add(
+        lambda msg: tqdm.write(msg, end=""),
+        format=log_format,
+        colorize=True,
+        level=logging_level,
+    )
     logger.debug(f"Logging initialized at level {logging_level}")
 
     headers = provider.build_headers()
@@ -343,7 +367,6 @@ async def process_api_requests_from_file(
                         )
                         status.num_tasks_started += 1
                         status.num_tasks_in_progress += 1
-                        pbar.update(1)
                     except StopIteration:
                         pass
 
@@ -364,6 +387,7 @@ async def process_api_requests_from_file(
                             status=status,
                             backoff=backoff,
                             max_attempts=retry.max_attempts,
+                            pbar=pbar,
                         )
                     )
                     next_request = None
