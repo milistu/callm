@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -14,7 +15,7 @@ from callm.core.models import FilesConfig, RateLimitConfig, RetryConfig
 from callm.core.rate_limit import TokenBucket
 from callm.core.retry import Backoff
 from callm.providers.base import Provider
-from callm.utils import task_id_generator_function
+from callm.utils import RequestData, task_id_generator_function, validate_jsonl_file
 
 """
 Core async engine for parallel API request processing.
@@ -142,7 +143,7 @@ class APIRequest:
                 asyncio.create_task(_requeue_after(retry_queue, self, delay))
             else:
                 if self.metadata is not None:
-                    error_data: list[dict[str, Any] | list[Any]] = [
+                    error_data: RequestData = [
                         self.request_json,
                         [str(e) for e in self.result],
                         self.metadata,
@@ -155,7 +156,7 @@ class APIRequest:
         else:
             assert payload is not None
             if self.metadata is not None:
-                success_data: list[dict[str, Any] | list[Any]] = [
+                success_data: RequestData = [
                     self.request_json,
                     payload,
                     self.metadata,
@@ -231,11 +232,10 @@ async def process_api_requests_from_file(
         ...     )
         ... )
     """
-    if retry is None:
-        retry = RetryConfig()
+    validate_jsonl_file(requests_file, "Requests file")
 
-    if not requests_file.endswith(".jsonl"):
-        raise ValueError("Requests file must be a JSONL file")
+    if not os.path.exists(requests_file):
+        raise FileNotFoundError(f"Requests file not found: {requests_file}")
 
     if files is None:
         files = FilesConfig(
@@ -243,10 +243,11 @@ async def process_api_requests_from_file(
             error_file=requests_file.replace(".jsonl", "_errors.jsonl"),
         )
     else:
-        if not files.save_file.endswith(".jsonl"):
-            raise ValueError("Save file must be a JSONL file")
-        if not files.error_file.endswith(".jsonl"):
-            raise ValueError("Error file must be a JSONL file")
+        validate_jsonl_file(files.save_file, "Save file")
+        validate_jsonl_file(files.error_file, "Error file")
+
+    if retry is None:
+        retry = RetryConfig()
 
     # Initialize logging
     logger.remove()
