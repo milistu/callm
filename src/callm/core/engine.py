@@ -10,11 +10,23 @@ from loguru import logger
 from tqdm import tqdm
 
 from callm.core.io import stream_jsonl, write_error, write_result
+from callm.core.models import FilesConfig, RateLimitConfig, RetryConfig
 from callm.core.rate_limit import TokenBucket
 from callm.core.retry import Backoff
 from callm.providers.base import Provider
-from callm.providers.models import FilesConfig, RateLimitConfig, RetryConfig
 from callm.utils import task_id_generator_function
+
+"""
+Core async engine for parallel API request processing.
+
+This module implements the main processing loop that:
+- Reads requests from JSONL files
+- Enforces rate limits (RPM and TPM) using token buckets
+- Handles retries with exponential backoff
+- Writes results and errors to JSONL files
+
+The engine is provider-agnostic and works with any Provider implementation.
+"""
 
 SECONDS_TO_PAUSE_AFTER_RATE_LIMIT_ERROR = 15
 SECONDS_TO_SLEEP_EACH_LOOP = 0.001
@@ -22,6 +34,23 @@ SECONDS_TO_SLEEP_EACH_LOOP = 0.001
 
 @dataclass
 class StatusTracker:
+    """
+    Tracks metrics and status during parallel API processing.
+
+    This tracker maintains counters for different types of outcomes
+    and is shared across all async tasks to provide global statistics.
+
+    Attributes:
+        num_tasks_started (int): Total number of tasks initiated
+        num_tasks_in_progress (int): Current number of active tasks
+        num_tasks_succeeded (int): Number of successfully completed tasks
+        num_tasks_failed (int): Number of tasks that failed after all retries
+        num_rate_limit_errors (int): Count of rate limit (429) errors encountered
+        num_api_errors (int): Count of other API errors (4xx, 5xx)
+        num_other_errors (int): Count of network/parsing/unexpected errors
+        time_of_last_rate_limit_error (float): Timestamp of most recent rate limit error
+    """
+
     num_tasks_started: int = 0
     num_tasks_in_progress: int = 0
     num_tasks_succeeded: int = 0
@@ -34,6 +63,21 @@ class StatusTracker:
 
 @dataclass
 class APIRequest:
+    """
+    Represents a single API request with retry logic.
+
+    Each request tracks its own state including retry attempts,
+    token consumption for rate limiting, and results/errors.
+
+    Attributes:
+        task_id (int): Unique identifier for this request
+        request_json (dict[str, Any]): The API request payload
+        token_consumption (int): Estimated tokens for rate limit budgeting
+        attempts_left (int): Remaining retry attempts
+        metadata (Optional[dict[str, Any]]): Optional metadata to include in output
+        result (list[object]): List of errors encountered across all attempts
+    """
+
     task_id: int
     request_json: dict[str, Any]
     token_consumption: int
@@ -52,6 +96,25 @@ class APIRequest:
         backoff: Backoff,
         max_attempts: int,
     ) -> None:
+        """
+        Execute the API request with error handling and retry logic.
+
+        This method:
+        1. Sends the request via the provider
+        2. Checks for errors and classifies them
+        3. Either retries (if attempts remain) or logs failure
+        4. Writes results to appropriate output files
+
+        Args:
+            session (ClientSession): Aiohttp client session for HTTP requests
+            provider (Provider): Provider implementation for API calls
+            headers (dict[str, str]): HTTP headers including authentication
+            retry_queue (asyncio.Queue["APIRequest"]): Queue for scheduling retries
+            files (FilesConfig): Configuration for output files
+            status (StatusTracker): Shared status tracker for metrics
+            backoff (Backoff): Backoff calculator for retry delays
+            max_attempts (int): Maximum number of retry attempts
+        """
         error: Optional[Any] = None
         payload: Optional[dict[str, Any]] = None
         try:
@@ -107,6 +170,14 @@ class APIRequest:
 async def _requeue_after(
     q: asyncio.Queue["APIRequest"], req: "APIRequest", seconds: float
 ) -> None:
+    """
+    Schedule a request to be retried after a delay.
+
+    Args:
+        q (asyncio.Queue["APIRequest"]): Retry queue to add the request to
+        req (APIRequest): The request to retry
+        seconds (float): Delay in seconds before retrying
+    """
     await asyncio.sleep(seconds)
     q.put_nowait(req)
 
@@ -119,7 +190,47 @@ async def process_api_requests_from_file(
     files: FilesConfig | None = None,
     logging_level: int = 20,
 ) -> None:
+    """
+    Process API requests from a JSONL file in parallel with rate limiting.
 
+    This is the main entry point for the library. It reads requests from a
+    JSONL file, processes them in parallel while respecting rate limits,
+    and writes results and errors to output files.
+
+    Features:
+    - Parallel processing with configurable concurrency
+    - Rate limiting for both requests per minute (RPM) and tokens per minute (TPM)
+    - Automatic retry with exponential backoff for failed requests
+    - Separate output files for successes and failures
+    - Progress bar and structured logging
+
+    Args:
+        provider (Provider): Provider implementation for the target API
+        requests_file (str): Path to input JSONL file with requests
+        rate_limit (RateLimitConfig): Rate limit configuration (RPM and TPM)
+        retry (Optional[RetryConfig]): Optional retry configuration (uses defaults if None)
+        files (Optional[FilesConfig]): Optional file configuration (auto-generated if None)
+        logging_level (int): Loguru logging level (20=INFO, 10=DEBUG)
+
+    Raises:
+        ValueError: If file paths don't end with .jsonl
+        FileNotFoundError: If requests_file doesn't exist
+
+    Example:
+        >>> provider = OpenAIProvider(
+        ...     api_key="sk-...",
+        ...     model="gpt-4o",
+        ...     request_url="https://api.openai.com/v1/responses"
+        ... )
+        >>> await process_api_requests_from_file(
+        ...     provider=provider,
+        ...     requests_file="requests.jsonl",
+        ...     rate_limit=RateLimitConfig(
+        ...         max_requests_per_minute=100,
+        ...         max_tokens_per_minute=50000
+        ...     )
+        ... )
+    """
     if retry is None:
         retry = RetryConfig()
 
