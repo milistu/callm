@@ -7,6 +7,7 @@ from typing import Generator, TypeAlias
 JSONValue: TypeAlias = (
     str | int | float | bool | None | dict[str, "JSONValue"] | list["JSONValue"]
 )
+RequestData: TypeAlias = list[dict[str, JSONValue] | list[JSONValue]]
 
 
 def api_endpoint_from_url(url: str) -> str:
@@ -41,14 +42,12 @@ def task_id_generator_function() -> Generator[int, None, None]:
         task_id += 1
 
 
-def append_to_jsonl(
-    data: list[dict[str, JSONValue] | list[JSONValue]], file: str
-) -> None:
+def append_to_jsonl(data: RequestData, file: str) -> None:
     """
     Append a json payload to the end of a jsonl file.
 
     Args:
-        data (list[dict[str, JSONValue] | list[JSONValue]]): the data to append to the file
+        data (RequestData): the data to append to the file
         file (str): the file to append the data to
 
     Returns:
@@ -57,3 +56,18 @@ def append_to_jsonl(
     json_string = json.dumps(data, ensure_ascii=False)
     with open(file, mode="a", encoding="utf-8") as f:
         f.write(json_string + "\n")
+
+
+def validate_jsonl_file(filepath: str, file_type: str = "File") -> None:
+    """
+    Validate that a filepath ends with .jsonl extension.
+
+    Args:
+        filepath: Path to validate
+        file_type: Description of file type for error message
+
+    Raises:
+        ValueError: If filepath doesn't end with .jsonl
+    """
+    if not filepath.endswith(".jsonl"):
+        raise ValueError(f"{file_type} must be a JSONL file")
