@@ -86,6 +86,22 @@ class APIRequest:
     metadata: Optional[dict[str, Any]] = None
     result: list[object] = field(default_factory=list)
 
+    def _format_error_data(self) -> RequestData:
+        """Format error data for JSONL output."""
+        if self.metadata is not None:
+            return [
+                self.request_json,
+                [str(e) for e in self.result],
+                self.metadata,
+            ]
+        return [self.request_json, [str(e) for e in self.result]]
+
+    def _format_success_data(self, payload: dict[str, Any]) -> RequestData:
+        """Format success data for JSONL output."""
+        if self.metadata is not None:
+            return [self.request_json, payload, self.metadata]
+        return [self.request_json, payload]
+
     async def call_api(
         self,
         session: ClientSession,
@@ -129,43 +145,53 @@ class APIRequest:
                 if provider.is_rate_limited(payload, response_headers):
                     status.time_of_last_rate_limit_error = time.time()
                     status.num_rate_limit_errors += 1
+                    logger.debug(
+                        f"Task {self.task_id}: Rate limited by {provider.name}"
+                    )
                 else:
                     status.num_api_errors += 1
+                    logger.debug(
+                        f"Task {self.task_id}: API error from {provider.name}: {parsed_error}"
+                    )
         except Exception as e:
             error = e
             status.num_other_errors += 1
+            logger.warning(
+                f"Task {self.task_id}: Error for {provider.name}: {type(e).__name__}: {e}"
+            )
 
         if error is not None:
             self.result.append(error)
             if self.attempts_left:
                 attempt_index = max_attempts - self.attempts_left - 1
                 delay = backoff.compute_delay(attempt_index)
+                logger.debug(
+                    f"Task {self.task_id}: Retrying in {delay:.2f}s "
+                    f"(attempt {attempt_index + 2}/{max_attempts})"
+                )
                 asyncio.create_task(_requeue_after(retry_queue, self, delay))
             else:
-                if self.metadata is not None:
-                    error_data: RequestData = [
-                        self.request_json,
-                        [str(e) for e in self.result],
-                        self.metadata,
-                    ]
-                else:
-                    error_data = [self.request_json, [str(e) for e in self.result]]
+                logger.info(
+                    f"Task {self.task_id}: Failed after {max_attempts} attempts"
+                )
+                error_data = self._format_error_data()
                 write_error(error_data, files.error_file)
                 status.num_tasks_in_progress -= 1
                 status.num_tasks_failed += 1
         else:
-            assert payload is not None
-            if self.metadata is not None:
-                success_data: RequestData = [
-                    self.request_json,
-                    payload,
-                    self.metadata,
-                ]
-            else:
-                success_data = [self.request_json, payload]
+            if payload is None:
+                logger.error(
+                    f"Task {self.task_id}: No payload received despite no error"
+                )
+                status.num_tasks_failed += 1
+                status.num_tasks_in_progress -= 1
+                return
+
+            success_data = self._format_success_data(payload)
             write_result(success_data, files.save_file)
             status.num_tasks_in_progress -= 1
             status.num_tasks_succeeded += 1
+            logger.debug(f"Task {self.task_id}: Completed successfully")
 
 
 async def _requeue_after(
