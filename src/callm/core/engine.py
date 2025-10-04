@@ -345,7 +345,7 @@ async def process_api_requests_from_file(
     except Exception:
         total_requests = 0
 
-    pbar = tqdm(total=total_requests or None, desc="Starting requests", unit="req")
+    pbar = tqdm(total=total_requests or None, desc="Completed requests", unit="req")
 
     async with ClientSession() as session:
         req_iter = stream_jsonl(requests_file)
