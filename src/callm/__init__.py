@@ -28,8 +28,15 @@ Example:
     ... )
 """
 
-from callm.core.engine import process_api_requests_from_file
-from callm.core.models import FilesConfig, RateLimitConfig, RetryConfig
+from callm.core.engine import process_api_requests, process_api_requests_from_file
+from callm.core.models import (
+    FilesConfig,
+    ProcessingResult,
+    ProcessingStats,
+    RateLimitConfig,
+    RequestResult,
+    RetryConfig,
+)
 from callm.providers import Provider, get_provider, register_provider
 from callm.providers.models import Usage
 
@@ -38,10 +45,15 @@ __version__ = "0.1.0"
 __all__ = [
     # Main processing function
     "process_api_requests_from_file",
+    "process_api_requests",
     # Configuration models
     "RateLimitConfig",
     "RetryConfig",
     "FilesConfig",
+    # Result models
+    "ProcessingResult",
+    "ProcessingStats",
+    "RequestResult",
     "Usage",
     # Provider interface
     "Provider",
