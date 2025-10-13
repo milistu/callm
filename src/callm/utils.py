@@ -2,12 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Generator, TypeAlias
-
-JSONValue: TypeAlias = (
-    str | int | float | bool | None | dict[str, "JSONValue"] | list["JSONValue"]
-)
-RequestData: TypeAlias = list[dict[str, JSONValue] | list[JSONValue]]
+from typing import Any, Generator
 
 
 def api_endpoint_from_url(url: str) -> str:
@@ -42,12 +37,12 @@ def task_id_generator_function() -> Generator[int, None, None]:
         task_id += 1
 
 
-def append_to_jsonl(data: RequestData, file: str) -> None:
+def append_to_jsonl(data: list[Any], file: str) -> None:
     """
     Append a json payload to the end of a jsonl file.
 
     Args:
-        data (RequestData): the data to append to the file
+        data (list[Any]): the data to append to the file
         file (str): the file to append the data to
 
     Returns:
