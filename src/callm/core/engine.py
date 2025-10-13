@@ -4,18 +4,25 @@ import asyncio
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Callable, Iterator, Optional
 
 from aiohttp import ClientSession
 from loguru import logger
 from tqdm import tqdm
 
 from callm.core.io import stream_jsonl, write_error, write_result
-from callm.core.models import FilesConfig, RateLimitConfig, RetryConfig
+from callm.core.models import (
+    FilesConfig,
+    ProcessingResult,
+    ProcessingStats,
+    RateLimitConfig,
+    RequestResult,
+    RetryConfig,
+)
 from callm.core.rate_limit import TokenBucket
 from callm.core.retry import Backoff
 from callm.providers.base import Provider
-from callm.utils import RequestData, task_id_generator_function, validate_jsonl_file
+from callm.utils import task_id_generator_function, validate_jsonl_file
 
 """
 Core async engine for parallel API request processing.
@@ -90,7 +97,7 @@ class APIRequest:
     metadata: Optional[dict[str, Any]] = None
     result: list[object] = field(default_factory=list)
 
-    def _format_error_data(self) -> RequestData:
+    def _format_error_data(self) -> list[Any]:
         """Format error data for JSONL output."""
         if self.metadata is not None:
             return [
@@ -100,7 +107,7 @@ class APIRequest:
             ]
         return [self.request_json, [str(e) for e in self.result]]
 
-    def _format_success_data(self, payload: dict[str, Any]) -> RequestData:
+    def _format_success_data(self, payload: dict[str, Any]) -> list[Any]:
         """Format success data for JSONL output."""
         if self.metadata is not None:
             return [self.request_json, payload, self.metadata]
@@ -112,11 +119,13 @@ class APIRequest:
         provider: Provider,
         headers: dict[str, str],
         retry_queue: asyncio.Queue["APIRequest"],
-        files: FilesConfig,
         status: StatusTracker,
         backoff: Backoff,
         max_attempts: int,
         pbar: tqdm,
+        files: Optional[FilesConfig] = None,
+        on_success: Optional[Callable[[list[Any]], None]] = None,
+        on_failure: Optional[Callable[[list[Any]], None]] = None,
     ) -> None:
         """
         Execute the API request with error handling and retry logic.
@@ -132,11 +141,13 @@ class APIRequest:
             provider (Provider): Provider implementation for API calls
             headers (dict[str, str]): HTTP headers including authentication
             retry_queue (asyncio.Queue["APIRequest"]): Queue for scheduling retries
-            files (FilesConfig): Configuration for output files
             status (StatusTracker): Shared status tracker for metrics
             backoff (Backoff): Backoff calculator for retry delays
             max_attempts (int): Maximum number of retry attempts
             pbar (tqdm): Progress bar for tracking requests
+            files (FilesConfig): Configuration for output files (optional)
+            on_success (Callable[[list[Any]], None]): Callback for successful requests (optional)
+            on_failure (Callable[[list[Any]], None]): Callback for failed requests (optional)
         """
         error: Optional[Any] = None
         payload: Optional[dict[str, Any]] = None
@@ -181,7 +192,11 @@ class APIRequest:
                     f"Task {self.task_id}: Failed after {max_attempts} attempts"
                 )
                 error_data = self._format_error_data()
-                write_error(error_data, files.error_file)
+                if on_failure:
+                    on_failure(error_data)
+                elif files:
+                    write_error(error_data, files.error_file)
+
                 status.num_tasks_in_progress -= 1
                 status.num_tasks_failed += 1
                 pbar.update(1)
@@ -207,7 +222,12 @@ class APIRequest:
                 logger.debug(f"Task {self.task_id}: Completed successfully")
 
             success_data = self._format_success_data(payload)
-            write_result(success_data, files.save_file)
+
+            if on_success:
+                on_success(success_data)
+            elif files:
+                write_result(success_data, files.save_file)
+
             status.num_tasks_in_progress -= 1
             status.num_tasks_succeeded += 1
             pbar.update(1)
@@ -226,6 +246,202 @@ async def _requeue_after(
     """
     await asyncio.sleep(seconds)
     q.put_nowait(req)
+
+
+def _setup_logger(logging_level: int) -> None:
+    """
+    Configure logger with clean format.
+
+    Args:
+        logging_level (int): Loguru logging level (20=INFO, 10=DEBUG)
+    """
+    logger.remove()
+
+    # Show module info only at DEBUG level (10 or lower)
+    if logging_level <= 10:
+        # DEBUG: Include module and line number for debugging
+        log_format = (
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{line}</cyan> | "
+            "<level>{message}</level>"
+        )
+    else:
+        # INFO/WARNING/ERROR: Clean format for end users
+        log_format = (
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <8}</level> | "
+            "<level>{message}</level>"
+        )
+
+    logger.add(
+        lambda msg: tqdm.write(msg, end=""),
+        format=log_format,
+        colorize=True,
+        level=logging_level,
+    )
+
+
+def _setup_rate_limiting(
+    rate_limit: RateLimitConfig, retry: RetryConfig
+) -> tuple[TokenBucket, TokenBucket, Backoff]:
+    """
+    Set up rate limiting and retry logic.
+
+    Args:
+        rate_limit: Rate limit configuration
+        retry: Retry configuration
+
+    Returns:
+        Tuple of (requests_bucket, tokens_bucket, backoff)
+    """
+    requests_bucket = TokenBucket.start(
+        capacity_per_minute=rate_limit.max_requests_per_minute
+    )
+    tokens_bucket = TokenBucket.start(
+        capacity_per_minute=rate_limit.max_tokens_per_minute
+    )
+    backoff = Backoff(
+        base_delay_seconds=retry.base_delay_seconds,
+        max_delay_seconds=retry.max_delay_seconds,
+        jitter=retry.jitter,
+    )
+    return requests_bucket, tokens_bucket, backoff
+
+
+def _log_summary(
+    status: StatusTracker,
+    duration: float,
+    output_description: str = "Results saved",
+) -> None:
+    """
+    Log processing summary and statistics.
+
+    Args:
+        status: Status tracker with metrics
+        duration: Processing duration in seconds
+        output_description: Description of where results went
+    """
+    logger.info(f"Parallel processing complete. {output_description}")
+    logger.info(
+        f"Successfully completed {status.num_tasks_succeeded:,} / {status.num_tasks_started:,} requests "
+        f"in {duration:.1f}s"
+    )
+
+    # Log usage statistics if available
+    if status.total_input_tokens > 0 or status.total_output_tokens > 0:
+        total_tokens = status.total_input_tokens + status.total_output_tokens
+        logger.info(
+            f"Token usage - Input: {status.total_input_tokens:,}, "
+            f"Output: {status.total_output_tokens:,}, "
+            f"Total: {total_tokens:,}"
+        )
+
+    # Log warnings for failures
+    if status.num_tasks_failed > 0:
+        logger.warning(
+            f"{status.num_tasks_failed:,} / {status.num_tasks_started:,} requests failed"
+        )
+    if status.num_rate_limit_errors > 0:
+        logger.warning(
+            f"{status.num_rate_limit_errors:,} rate limit errors received. "
+            f"Consider running at lower rate."
+        )
+
+
+async def _process_requests_internal(
+    provider: Provider,
+    request_iterator: Iterator[dict[str, Any]],
+    total_requests: int,
+    rate_limit: RateLimitConfig,
+    retry: RetryConfig,
+    status: StatusTracker,
+    files: Optional[FilesConfig] = None,
+    on_success: Optional[Callable[[list[Any]], None]] = None,
+    on_failure: Optional[Callable[[list[Any]], None]] = None,
+) -> None:
+    """
+    Internal function for processing requests (shared between file and memory modes).
+
+    Args:
+        provider (Provider): Provider implementation
+        request_iterator (Iterator[dict[str, Any]]): Iterator over requests
+        total_requests (int): Total number of requests for progress bar
+        rate_limit (RateLimitConfig): Rate limit configuration
+        retry: Retry configuration
+        status (StatusTracker): Status tracker to update
+        files (Optional[FilesConfig]): Files configuration (optional)
+        on_success (Optional[Callable[[list[Any]], None]]): Callback for successful requests (optional)
+        on_failure (Optional[Callable[[list[Any]], None]]): Callback for failed requests (optional)
+    """
+
+    headers = provider.build_headers()
+    requests_bucket, tokens_bucket, backoff = _setup_rate_limiting(rate_limit, retry)
+
+    queue_of_requests_to_retry: asyncio.Queue[APIRequest] = asyncio.Queue()
+    task_id_generator = task_id_generator_function()
+    next_request: Optional[APIRequest] = None
+
+    pbar = tqdm(total=total_requests or None, desc="Completed requests", unit="req")
+
+    async with ClientSession() as session:
+        while True:
+            if next_request is None:
+                if not queue_of_requests_to_retry.empty():
+                    next_request = queue_of_requests_to_retry.get_nowait()
+                else:
+                    try:
+                        request_json = next(request_iterator)
+                        next_request = APIRequest(
+                            task_id=next(task_id_generator),
+                            request_json=request_json,
+                            token_consumption=provider.estimate_input_tokens(
+                                request_json
+                            ),
+                            attempts_left=retry.max_attempts,
+                            metadata=request_json.pop("metadata", None),
+                        )
+                        status.num_tasks_started += 1
+                        status.num_tasks_in_progress += 1
+                    except StopIteration:
+                        pass
+
+            if next_request is not None:
+                enough_requests = requests_bucket.try_consume(1)
+                enough_tokens = tokens_bucket.try_consume(
+                    next_request.token_consumption
+                )
+                if enough_requests and enough_tokens:
+                    next_request.attempts_left -= 1
+                    asyncio.create_task(
+                        next_request.call_api(
+                            session=session,
+                            provider=provider,
+                            headers=headers,
+                            retry_queue=queue_of_requests_to_retry,
+                            files=files,
+                            status=status,
+                            backoff=backoff,
+                            max_attempts=retry.max_attempts,
+                            pbar=pbar,
+                            on_success=on_success,
+                            on_failure=on_failure,
+                        )
+                    )
+                    next_request = None
+
+            if status.num_tasks_in_progress == 0:
+                break
+
+            await asyncio.sleep(SECONDS_TO_SLEEP_EACH_LOOP)
+
+            since_rate_limit_error = time.time() - status.time_of_last_rate_limit_error
+            if since_rate_limit_error < SECONDS_TO_PAUSE_AFTER_RATE_LIMIT_ERROR:
+                await asyncio.sleep(
+                    SECONDS_TO_PAUSE_AFTER_RATE_LIMIT_ERROR - since_rate_limit_error
+                )
+
+    pbar.close()
 
 
 async def process_api_requests_from_file(
@@ -277,8 +493,9 @@ async def process_api_requests_from_file(
         ...     )
         ... )
     """
-    validate_jsonl_file(requests_file, "Requests file")
+    _setup_logger(logging_level)
 
+    validate_jsonl_file(requests_file, "Requests file")
     if not os.path.exists(requests_file):
         raise FileNotFoundError(f"Requests file not found: {requests_file}")
 
@@ -291,52 +508,7 @@ async def process_api_requests_from_file(
         validate_jsonl_file(files.save_file, "Save file")
         validate_jsonl_file(files.error_file, "Error file")
 
-    if retry is None:
-        retry = RetryConfig()
-
-    # Initialize logging
-    logger.remove()
-    # Show module info only at DEBUG level
-    if logging_level <= 10:  # DEBUG level
-        log_format = (
-            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-            "<level>{level: <8}</level> | "
-            "<cyan>{name}</cyan>:<cyan>{line}</cyan> | "
-            "<level>{message}</level>"
-        )
-    else:  # INFO and above: clean format
-        log_format = (
-            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-            "<level>{level: <8}</level> | "
-            "<level>{message}</level>"
-        )
-
-    logger.add(
-        lambda msg: tqdm.write(msg, end=""),
-        format=log_format,
-        colorize=True,
-        level=logging_level,
-    )
-    logger.debug(f"Logging initialized at level {logging_level}")
-
-    headers = provider.build_headers()
-
-    requests_bucket = TokenBucket.start(
-        capacity_per_minute=rate_limit.max_requests_per_minute
-    )
-    tokens_bucket = TokenBucket.start(
-        capacity_per_minute=rate_limit.max_tokens_per_minute
-    )
-    backoff = Backoff(
-        base_delay_seconds=retry.base_delay_seconds,
-        max_delay_seconds=retry.max_delay_seconds,
-        jitter=retry.jitter,
-    )
-
-    queue_of_requests_to_retry: asyncio.Queue[APIRequest] = asyncio.Queue()
-    task_id_generator = task_id_generator_function()
-    status = StatusTracker()
-    next_request: Optional[APIRequest] = None
+    retry = retry or RetryConfig()
 
     # Get number of requests in file
     try:
@@ -345,89 +517,155 @@ async def process_api_requests_from_file(
     except Exception:
         total_requests = 0
 
-    pbar = tqdm(total=total_requests or None, desc="Completed requests", unit="req")
+    status = StatusTracker()
+    start_time = time.time()
 
-    async with ClientSession() as session:
-        req_iter = stream_jsonl(requests_file)
-        while True:
-            if next_request is None:
-                if not queue_of_requests_to_retry.empty():
-                    next_request = queue_of_requests_to_retry.get_nowait()
-                else:
-                    try:
-                        request_json = next(req_iter)
-                        next_request = APIRequest(
-                            task_id=next(task_id_generator),
-                            request_json=request_json,
-                            token_consumption=provider.estimate_input_tokens(
-                                request_json
-                            ),
-                            attempts_left=retry.max_attempts,
-                            metadata=request_json.pop("metadata", None),
-                        )
-                        status.num_tasks_started += 1
-                        status.num_tasks_in_progress += 1
-                    except StopIteration:
-                        pass
-
-            if next_request is not None:
-                enough_requests = requests_bucket.try_consume(1)
-                enough_tokens = tokens_bucket.try_consume(
-                    next_request.token_consumption
-                )
-                if enough_requests and enough_tokens:
-                    next_request.attempts_left -= 1
-                    asyncio.create_task(
-                        next_request.call_api(
-                            session=session,
-                            provider=provider,
-                            headers=headers,
-                            retry_queue=queue_of_requests_to_retry,
-                            files=files,
-                            status=status,
-                            backoff=backoff,
-                            max_attempts=retry.max_attempts,
-                            pbar=pbar,
-                        )
-                    )
-                    next_request = None
-
-            if status.num_tasks_in_progress == 0:
-                break
-
-            await asyncio.sleep(SECONDS_TO_SLEEP_EACH_LOOP)
-
-            since_rate_limit_error = time.time() - status.time_of_last_rate_limit_error
-            if since_rate_limit_error < SECONDS_TO_PAUSE_AFTER_RATE_LIMIT_ERROR:
-                await asyncio.sleep(
-                    SECONDS_TO_PAUSE_AFTER_RATE_LIMIT_ERROR - since_rate_limit_error
-                )
-
-    pbar.close()
-
-    # Log summary
-    logger.info(f"Parallel processing complete. Results saved to {files.save_file}")
-    logger.info(
-        f"Successfully completed {status.num_tasks_succeeded}/{status.num_tasks_started} requests"
+    await _process_requests_internal(
+        provider=provider,
+        request_iterator=stream_jsonl(requests_file),
+        total_requests=total_requests,
+        rate_limit=rate_limit,
+        retry=retry,
+        status=status,
+        files=files,
     )
 
-    # Log usage statistics if available
-    if status.total_input_tokens > 0 or status.total_output_tokens > 0:
-        total_tokens = status.total_input_tokens + status.total_output_tokens
-        logger.info(
-            f"Token usage - Input: {status.total_input_tokens:,}, "
-            f"Output: {status.total_output_tokens:,}, "
-            f"Total: {total_tokens:,}"
+    duration = time.time() - start_time
+    description = f"Results saved to {files.save_file}"
+    description += f" and {files.error_file}" if status.num_tasks_failed > 0 else ""
+    _log_summary(status, duration, output_description=description)
+
+
+async def process_api_requests(
+    provider: Provider,
+    requests: list[dict[str, Any]],
+    rate_limit: RateLimitConfig,
+    retry: RetryConfig | None = None,
+    logging_level: int = 20,
+    max_batch_size: int = 10_000,
+) -> ProcessingResult:
+    """
+    Process API requests from a list with in-memory results.
+
+    This function processes requests in parallel while respecting rate limits and returns results in memory. Perfect for small to medium batches and programmatic use.
+
+    For large batches (> 10,000 requests), use process_api_requests_from_file() instead to avoid memory issues.
+
+    Args:
+        provider (Provider): Provider implementation for the target API
+        requests (list[dict[str, Any]]): List of request dictionaries
+        rate_limit (RateLimitConfig): Rate limit configuration (RPM and TPM)
+        retry (Optional[RetryConfig]): Optional retry configuration (uses defaults if None)
+        logging_level (int): Loguru logging level (20=INFO, 10=DEBUG)
+        max_batch_size (int): Maximum allowed batch size (default: 10,000)
+
+    Returns:
+        ProcessingResult: Object containing successes, failures, and statistics
+
+    Raises:
+        ValueError: If batch size exceeds max_batch_size
+
+    Example:
+        >>> requests = [
+        ...     {"messages": [{"role": "user", "content": "Hello"}]},
+        ...     {"messages": [{"role": "user", "content": "Hi there"}]},
+        ... ]
+        >>> result = await process_api_requests(
+        ...     provider=provider,
+        ...     requests=requests,
+        ...     rate_limit=RateLimitConfig(
+        ...         max_requests_per_minute=100,
+        ...         max_tokens_per_minute=50000
+        ...     )
+        ... )
+        >>> print(f"Processed: {result.stats.successful}/{result.stats.total_requests}")
+        >>> for success in result.successes:
+        ...     print(success.response)
+    """
+    _setup_logger(logging_level)
+
+    if len(requests) > max_batch_size:
+        raise ValueError(
+            f"Batch size {len(requests)} exceeds maximum {max_batch_size}. "
+            f"For large batches, use process_api_requests_from_file() instead."
         )
 
-    # Log warnings for failures
-    if status.num_tasks_failed > 0:
-        logger.warning(
-            f"{status.num_tasks_failed} / {status.num_tasks_started} requests failed. "
-            f"Errors logged to {files.error_file}"
+    retry = retry or RetryConfig()
+
+    # In-memory result collectors
+    successes: list[RequestResult] = []
+    failures: list[RequestResult] = []
+
+    # Memory output handlers
+    def on_success(entry: list[Any]) -> None:
+        """Capture successful result in memory instead of writing to file."""
+        request_data = entry[0]
+        response_data = entry[1]
+        metadata = entry[2] if len(entry) > 2 else None
+
+        successes.append(
+            RequestResult(
+                request=request_data,
+                response=response_data,
+                error=None,
+                metadata=metadata,
+                attempts=1,
+            )
         )
-    if status.num_rate_limit_errors > 0:
-        logger.warning(
-            f"{status.num_rate_limit_errors} rate limit errors received. "
-            f"Consider running at lower rate."
+
+    def on_failure(entry: list[Any]) -> None:
+        """Capture failed result in memory instead of writing to file."""
+        request_data = entry[0]
+        errors = entry[1]
+        metadata = entry[2] if len(entry) > 2 else None
+
+        error_msg = (
+            "; ".join(str(e) for e in errors)
+            if isinstance(errors, list)
+            else str(errors)
         )
+
+        failures.append(
+            RequestResult(
+                request=request_data,
+                response=None,
+                error=error_msg,
+                metadata=metadata,
+                attempts=1,
+            )
+        )
+
+    status = StatusTracker()
+    start_time = time.time()
+
+    await _process_requests_internal(
+        provider=provider,
+        request_iterator=iter(requests),
+        total_requests=len(requests),
+        rate_limit=rate_limit,
+        retry=retry,
+        status=status,
+        on_success=on_success,
+        on_failure=on_failure,
+    )
+
+    duration = time.time() - start_time
+
+    # Log summary
+    _log_summary(status, duration, "Processing complete (in-memory)")
+
+    return ProcessingResult(
+        successes=successes,
+        failures=failures,
+        stats=ProcessingStats(
+            total_requests=status.num_tasks_started,
+            successful=status.num_tasks_succeeded,
+            failed=status.num_tasks_failed,
+            total_input_tokens=status.total_input_tokens,
+            total_output_tokens=status.total_output_tokens,
+            rate_limit_errors=status.num_rate_limit_errors,
+            api_errors=status.num_api_errors,
+            other_errors=status.num_other_errors,
+            duration_seconds=duration,
+        ),
+    )
