@@ -23,6 +23,7 @@ repos:
       - id: mypy
         args: [--strict, --ignore-missing-imports]
         additional_dependencies: [types-requests]
+        exclude: ^examples/
 
   # Builtin pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
