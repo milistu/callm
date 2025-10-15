@@ -4,11 +4,13 @@ from typing import Any, Callable, Dict
 
 from callm.providers.base import Provider
 from callm.providers.openai import OpenAIProvider
+from callm.providers.cohere import CohereProvider
 
 ProviderFactory = Callable[..., Provider]
 
 _REGISTRY: Dict[str, ProviderFactory] = {
     "openai": lambda **kwargs: OpenAIProvider(**kwargs),
+    "cohere": lambda **kwargs: CohereProvider(**kwargs),
 }
 
 
