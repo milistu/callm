@@ -31,6 +31,7 @@ with open("data/cohere_embed_requests.jsonl", "w") as f:
                     "model": "embed-v4.0",
                     "texts": [f"Number is currently: {i}. And it keeps increasing!"],
                     "input_type": "search_document",
+                    "output_dimension": 1536,
                     "embedding_types": ["float"],
                     "metadata": {"row_id": i},
                 }
@@ -44,7 +45,7 @@ async def main() -> None:
         provider=provider,
         requests_file="data/cohere_embed_requests.jsonl",
         rate_limit=RateLimitConfig(
-            max_requests_per_minute=RPM * 0.4,
+            max_requests_per_minute=RPM * 0.8,
             max_tokens_per_minute=TPM,
         ),
     )
