@@ -14,7 +14,7 @@ load_dotenv()
 
 RPM = 2_000
 # No TPM limit
-TPM = float("inf")
+TPM = None
 
 provider = CohereProvider(
     api_key=os.getenv("COHERE_API_KEY"),
