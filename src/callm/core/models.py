@@ -15,7 +15,7 @@ class RateLimitConfig:
     """
 
     max_requests_per_minute: float
-    max_tokens_per_minute: float
+    max_tokens_per_minute: Optional[float]
 
 
 @dataclass

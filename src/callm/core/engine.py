@@ -284,23 +284,31 @@ def _setup_logger(logging_level: int) -> None:
 
 def _setup_rate_limiting(
     rate_limit: RateLimitConfig, retry: RetryConfig
-) -> tuple[TokenBucket, TokenBucket, Backoff]:
+) -> tuple[TokenBucket, TokenBucket | None, Backoff]:
     """
-    Set up rate limiting and retry logic.
+    Initialize rate limiting token buckets and retry backoff calculator.
+
+    Creates two independent token buckets for request and token rate limiting,
+    plus a backoff calculator for retry delays.
 
     Args:
         rate_limit: Rate limit configuration
         retry: Retry configuration
 
     Returns:
-        Tuple of (requests_bucket, tokens_bucket, backoff)
+        Tuple of (requests_bucket, tokens_bucket, backoff).
+        tokens_bucket will be None if max_tokens_per_minute is None.
     """
     requests_bucket = TokenBucket.start(
         capacity_per_minute=rate_limit.max_requests_per_minute
     )
-    tokens_bucket = TokenBucket.start(
-        capacity_per_minute=rate_limit.max_tokens_per_minute
-    )
+    # Only create tokens bucket if TPM limit exists
+    tokens_bucket = None
+    if rate_limit.max_tokens_per_minute is not None:
+        tokens_bucket = TokenBucket.start(
+            capacity_per_minute=rate_limit.max_tokens_per_minute
+        )
+
     backoff = Backoff(
         base_delay_seconds=retry.base_delay_seconds,
         max_delay_seconds=retry.max_delay_seconds,
@@ -408,9 +416,14 @@ async def _process_requests_internal(
 
             if next_request is not None:
                 enough_requests = requests_bucket.try_consume(1)
-                enough_tokens = tokens_bucket.try_consume(
-                    next_request.token_consumption
-                )
+
+                # Only check token limit if tokens bucket exists
+                enough_tokens = True
+                if tokens_bucket is not None:
+                    enough_tokens = tokens_bucket.try_consume(
+                        next_request.token_consumption
+                    )
+
                 if enough_requests and enough_tokens:
                     next_request.attempts_left -= 1
                     asyncio.create_task(
