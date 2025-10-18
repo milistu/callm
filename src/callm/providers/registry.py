@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict
 
 from callm.providers.base import Provider
 from callm.providers.cohere import CohereProvider
+from callm.providers.deepseek import DeepSeekProvider
 from callm.providers.openai import OpenAIProvider
 from callm.providers.voyageai import VoyageAIProvider
 
@@ -13,6 +14,7 @@ _REGISTRY: Dict[str, ProviderFactory] = {
     "openai": lambda **kwargs: OpenAIProvider(**kwargs),
     "cohere": lambda **kwargs: CohereProvider(**kwargs),
     "voyageai": lambda **kwargs: VoyageAIProvider(**kwargs),
+    "deepseek": lambda **kwargs: DeepSeekProvider(**kwargs),
 }
 
 
