@@ -5,10 +5,9 @@ from typing import Any, Mapping, Optional, Tuple
 from aiohttp import ClientSession
 from tiktoken import encoding_for_model
 
-from callm.providers.base import Provider
+from callm.providers.base import BaseProvider
 from callm.providers.models import Usage
 from callm.tokenizers.openai import num_tokens_from_openai_request
-from callm.utils import api_endpoint_from_url
 
 """
 OpenAI API provider implementation.
@@ -23,7 +22,7 @@ Uses tiktoken for accurate token counting.
 """
 
 
-class OpenAIProvider(Provider):
+class OpenAIProvider(BaseProvider):
     """
     Provider implementation for OpenAI and Azure OpenAI APIs.
 
@@ -91,7 +90,7 @@ class OpenAIProvider(Provider):
         - embeddings: Counts input text tokens
         - responses: Counts input content tokens
         """
-        endpoint = api_endpoint_from_url(self.request_url)
+        endpoint = self._extract_endpoint()
         return num_tokens_from_openai_request(request_json, endpoint, self.tokenizer)
 
     async def send(
@@ -127,19 +126,6 @@ class OpenAIProvider(Provider):
         if isinstance(error, dict):
             return str(error.get("message") or error)
         return str(error)
-
-    def is_rate_limited(
-        self,
-        payload: dict[str, Any],
-        headers: Optional[Mapping[str, str]] = None,
-    ) -> bool:
-        """
-        Detect rate limiting from error message.
-
-        Checks for "rate limit" in error message text.
-        """
-        msg = (self.parse_error(payload) or "").lower()
-        return "rate limit" in msg
 
     def extract_usage(self, payload: dict[str, Any]) -> Optional[Usage]:
         """

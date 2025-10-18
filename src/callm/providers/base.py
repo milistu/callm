@@ -1,89 +1,89 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Protocol, Tuple
+from abc import ABC, abstractmethod
+from typing import Any, Mapping, Optional, Tuple
 
 from aiohttp import ClientSession
 
 from callm.providers.models import Usage
+from callm.utils import api_endpoint_from_url
 
 
-class Provider(Protocol):
+class BaseProvider(ABC):
     """
-    Protocol defining the interface for LLM provider adapters.
+    Abstract base class for LLM provider implementations.
 
-    This protocol allows the core engine to work uniformly across different
-    LLM providers (OpenAI, Anthropic, Gemini, etc.) without provider-specific
-    logic. Each provider implementation handles the details of authentication,
-    token counting, request formatting, and response parsing.
+    This class provides default implementations for common provider patterns
+    while allowing providers to override when they need custom behavior.
 
-    The protocol enforces a contract that ensures:
-    - Consistent authentication via headers
-    - Token estimation for rate limit budgeting
-    - Standardized error handling and rate limit detection
-    - Usage metrics extraction when available
+    Default implementations provided:
+    - Bearer token authentication (build_headers)
+    - Standard request sending with model injection (send)
+    - Common rate limit detection (is_rate_limited)
+    - Endpoint extraction helper (_extract_endpoint)
+
+    Subclasses must implement:
+    - estimate_input_tokens: Provider-specific token counting
+    - parse_error: Provider-specific error message extraction
+    - extract_usage: Provider-specific usage metric extraction
 
     Attributes:
-        name (str): Human-readable provider identifier (e.g., "openai", "anthropic")
-        request_url (str): Full API endpoint URL for making requests
+        name (str): Human-readable provider identifier (e.g., "openai", "deepseek")
+        api_key (str): API authentication key
+        model (str): Model identifier
+        request_url (str): Full API endpoint URL
 
     Example Implementation:
-        >>> class MyProvider:
+        >>> class MyProvider(BaseProvider):
         ...     name = "myprovider"
         ...
-        ...     def __init__(self, api_key: str, request_url: str):
+        ...     def __init__(self, api_key: str, model: str, request_url: str):
         ...         self.api_key = api_key
+        ...         self.model = model
         ...         self.request_url = request_url
         ...
-        ...     def build_headers(self) -> dict[str, str]:
-        ...         return {"Authorization": f"Bearer {self.api_key}"}
+        ...     def estimate_input_tokens(self, request_json):
+        ...         # Custom token counting logic
+        ...         return len(str(request_json))
         ...
-        ...     # ... implement other methods
+        ...     def parse_error(self, payload):
+        ...         return payload.get("error", {}).get("message")
+        ...
+        ...     def extract_usage(self, payload):
+        ...         usage = payload.get("usage", {})
+        ...         return Usage(
+        ...             input_tokens=usage.get("input_tokens", 0),
+        ...             output_tokens=usage.get("output_tokens", 0),
+        ...             total_tokens=usage.get("total_tokens", 0)
+        ...         )
     """
 
     name: str
+    api_key: str
+    model: str
     request_url: str
 
     def build_headers(self) -> dict[str, str]:
         """
-        Build authentication and required headers for API requests.
+        Build authentication headers for API requests.
 
-        This method constructs the HTTP headers needed for authenticating
-        with the provider's API. Different providers use different auth
-        schemes (Bearer tokens, API keys, custom headers).
+        Default implementation uses Bearer token authentication, which is
+        standard for most LLM APIs (DeepSeek, Cohere, VoyageAI, etc.).
+
+        Providers with different auth schemes (e.g., Azure OpenAI) should
+        override this method.
 
         Returns:
-            dict[str, str]: Dictionary of HTTP headers including authentication credentials
+            dict[str, str]: HTTP headers including authentication
 
         Example:
             >>> provider.build_headers()
-            {'Authorization': 'Bearer sk-...'}
+            {'Authorization': 'Bearer sk-...', 'Content-Type': 'application/json'}
         """
-        ...
-
-    def estimate_input_tokens(self, request_json: dict[str, Any]) -> int:
-        """
-        Estimate the number of input tokens for rate limit budgeting.
-
-        This estimate is used to enforce TPM (tokens per minute) limits
-        before sending requests. It should be conservative (slightly
-        over-estimate) to avoid exceeding rate limits.
-
-        For different providers you may use different methods to estimate the number of input tokens:
-        - Dedicated token counting API
-        - Tiktoken for OpenAI-compatible endpoints
-        - Provider-specific tokenizer libraries
-
-        Args:
-            request_json (dict[str, Any]): The request payload dictionary
-
-        Returns:
-            int: Estimated number of input tokens (always >= 0)
-
-        Note:
-            This only estimates INPUT tokens. Output tokens are not known
-            until the response is received and don't count toward rate limits.
-        """
-        ...
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
 
     async def send(
         self,
@@ -94,56 +94,40 @@ class Provider(Protocol):
         """
         Perform the HTTP request to the provider's API.
 
-        This method executes the actual API call and returns both the
-        response payload and headers. Response headers are optional but
-        useful for header-based rate limit detection.
+        Default implementation:
+        1. Copies the request payload
+        2. Adds model to payload if not present
+        3. POSTs to request_url
+        4. Returns JSON response and headers
+
+        Most providers can use this default. Providers with special payload
+        handling (e.g., OpenAI non-Azure) can override.
 
         Args:
-            session (ClientSession): Aiohttp client session for making the request
-            headers (Mapping[str, str]): HTTP headers including authentication from build_headers()
-            request_json (dict[str, Any]): Request payload (will be sent as JSON body)
+            session (ClientSession): Aiohttp client session
+            headers (Mapping[str, str]): HTTP headers from build_headers()
+            request_json (dict[str, Any]): Request payload
 
         Returns:
             Tuple of (response_payload, response_headers):
-            - response_payload (dict[str, Any]): Parsed JSON response as dictionary
-            - response_headers (Optional[Mapping[str, str]]): Optional response headers for rate limit detection
+            - response_payload (dict[str, Any]): Parsed JSON response
+            - response_headers (Optional[Mapping[str, str]]): Response headers
 
         Raises:
             aiohttp.ClientError: For network/connection errors
             asyncio.TimeoutError: For request timeouts
-
-        Example:
-            >>> async with session.post(url, headers=headers, json=payload) as resp:
-            ...     data = await resp.json()
-            ...     return data, resp.headers
         """
-        ...
+        payload = dict(request_json)
 
-    def parse_error(self, payload: dict[str, Any]) -> Optional[str]:
-        """
-        Extract error message from API response payload.
+        # Add model to payload if not present (common pattern)
+        if "model" not in payload:
+            payload["model"] = self.model
 
-        Checks if the response contains an error and returns a
-        human-readable error message. Returns None if no error.
-
-        Different providers format errors differently:
-        - OpenAI: {"error": {"message": "...", "type": "..."}}
-        - Anthropic: {"error": {"type": "...", "message": "..."}}
-        - Others may vary
-
-        Args:
-            payload (dict[str, Any]): The API response payload dictionary
-
-        Returns:
-            Optional[str]: Error message string if error present, None if successful response
-
-        Example:
-            >>> provider.parse_error({"error": {"message": "Invalid API key"}})
-            'Invalid API key'
-            >>> provider.parse_error({"id": "chatcmpl-123", "choices": [...]})
-            None
-        """
-        ...
+        async with session.post(
+            self.request_url, headers=headers, json=payload
+        ) as response:
+            data = await response.json()
+            return data, response.headers
 
     def is_rate_limited(
         self,
@@ -153,50 +137,120 @@ class Provider(Protocol):
         """
         Determine if the response indicates rate limiting.
 
-        This method classifies errors to distinguish rate limit errors
-        (HTTP 429, "rate limit exceeded" messages) from other errors.
-        Rate-limited requests trigger special handling with longer pauses.
+        Default implementation checks:
+        1. HTTP 429 status code in response headers
+        2. "rate limit" or "too many requests" in error message
 
-        Detection methods:
-        - Check for "rate limit" in error message
-        - Check HTTP status from headers
-        - Check provider-specific rate limit indicators
+        This works for most providers. Providers with special rate limit
+        detection (e.g., checking error types) can override.
 
         Args:
-            payload (dict[str, Any]): The API response payload dictionary
-            headers (Optional[Mapping[str, str]]): Optional response headers for status code checking
+            payload (dict[str, Any]): API response payload
+            headers (Optional[Mapping[str, str]]): Response headers
 
         Returns:
-            bool: True if the response indicates rate limiting, False otherwise
+            bool: True if rate limited, False otherwise
 
         Example:
-            >>> payload = {"error": {"message": "Rate limit exceeded"}}
-            >>> provider.is_rate_limited(payload)
+            >>> provider.is_rate_limited(
+            ...     {"error": {"message": "Rate limit exceeded"}},
+            ...     {"status": "429"}
+            ... )
             True
+        """
+        # Check HTTP status code from headers
+        if headers:
+            status = headers.get("status")
+            if status == "429":
+                return True
+
+        # Check error message content
+        error_msg = (self.parse_error(payload) or "").lower()
+        return "rate limit" in error_msg or "too many requests" in error_msg
+
+    def _extract_endpoint(self) -> str:
+        """
+        Extract the API endpoint type from the request URL.
+
+        This is a helper method for providers that need to determine the
+        endpoint type (e.g., "chat/completions", "embeddings") for
+        token counting logic.
+
+        Returns:
+            str: The endpoint path (e.g., "chat/completions", "embeddings")
+
+        Raises:
+            ValueError: If endpoint cannot be extracted from URL
+
+        Example:
+            >>> provider.request_url = "https://api.openai.com/v1/chat/completions"
+            >>> provider._extract_endpoint()
+            'chat/completions'
+        """
+        try:
+            return api_endpoint_from_url(self.request_url)
+        except ValueError:
+            # Fallback: extract last segment of path
+            return self.request_url.rstrip("/").split("/")[-1]
+
+    @abstractmethod
+    def estimate_input_tokens(self, request_json: dict[str, Any]) -> int:
+        """
+        Estimate the number of input tokens for rate limit budgeting.
+
+        This method must be implemented by each provider as token counting
+        is provider-specific (different tokenizers, different logic).
+
+        Args:
+            request_json (dict[str, Any]): The request payload
+
+        Returns:
+            int: Estimated number of input tokens (always >= 0)
+
+        Note:
+            This only estimates INPUT tokens. Output tokens are not known
+            until the response is received.
         """
         ...
 
+    @abstractmethod
+    def parse_error(self, payload: dict[str, Any]) -> Optional[str]:
+        """
+        Extract error message from API response payload.
+
+        This method must be implemented by each provider as error formats
+        differ across providers.
+
+        Args:
+            payload (dict[str, Any]): The API response payload
+
+        Returns:
+            Optional[str]: Error message if present, None if successful response
+
+        Example:
+            >>> provider.parse_error({"error": {"message": "Invalid API key"}})
+            'Invalid API key'
+            >>> provider.parse_error({"id": "chatcmpl-123", "choices": [...]})
+            None
+        """
+        ...
+
+    @abstractmethod
     def extract_usage(self, payload: dict[str, Any]) -> Optional[Usage]:
         """
         Extract token usage metrics from a successful API response.
 
-        Parses the response to extract input/output token counts for
-        tracking and billing purposes. Returns None if usage info is
-        not available or the response is an error.
-
-        Different providers use different field names:
-        - OpenAI chat: prompt_tokens, completion_tokens, total_tokens
-        - OpenAI responses: input_tokens, output_tokens, total_tokens
-        - Anthropic: input_tokens, output_tokens
+        This method must be implemented by each provider as usage formats
+        differ across providers.
 
         Args:
-            payload (dict[str, Any]): The API response payload dictionary
+            payload (dict[str, Any]): The API response payload
 
         Returns:
             Optional[Usage]: Usage object with token counts, or None if unavailable
 
         Example:
-            >>> payload = {"usage": {"prompt_tokens": 10, "completion_tokens": 20}}
+            >>> payload = {"usage": {"input_tokens": 10, "output_tokens": 20}}
             >>> usage = provider.extract_usage(payload)
             >>> usage.input_tokens
             10

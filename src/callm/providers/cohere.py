@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any, Optional
 
-from aiohttp import ClientSession
-
-from callm.providers.base import Provider
+from callm.providers.base import BaseProvider
 from callm.providers.models import Usage
 from callm.tokenizers.cohere import get_cohere_tokenizer, num_tokens_from_cohere_request
-from callm.utils import api_endpoint_from_url
 
 
-class CohereProvider(Provider):
+class CohereProvider(BaseProvider):
     """
     Provider implementation for Cohere API.
 
@@ -62,20 +59,6 @@ class CohereProvider(Provider):
                 f"Failed to initialize tokenizer for model '{model}': {e}"
             ) from e
 
-    def build_headers(self) -> dict[str, str]:
-        """
-        Build authentication headers for Cohere API.
-
-        Cohere uses Bearer token authentication.
-
-        Returns:
-            dict[str, str]: Headers with Authorization and Content-Type
-        """
-        return {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-
     def estimate_input_tokens(self, request_json: dict[str, Any]) -> int:
         """
         Estimate input tokens using Cohere's tokenizer.
@@ -90,51 +73,22 @@ class CohereProvider(Provider):
         Returns:
             int: Estimated number of input tokens
         """
-        # Extract endpoint from URL (e.g., "v2/embed" -> "embed")
-        try:
-            endpoint = api_endpoint_from_url(self.request_url)
-        except ValueError:
-            # Fallback: try to extract just the last part
-            endpoint = self.request_url.rstrip("/").split("/")[-1]
-
+        endpoint = self._extract_endpoint()
         return num_tokens_from_cohere_request(request_json, endpoint, self.tokenizer)
-
-    async def send(
-        self,
-        session: ClientSession,
-        headers: Mapping[str, str],
-        request_json: dict[str, Any],
-    ) -> Tuple[dict[str, Any], Optional[Mapping[str, str]]]:
-        """
-        Send request to Cohere API.
-
-        Automatically adds model to payload if not present.
-
-        Args:
-            session (ClientSession): Aiohttp session
-            headers (Mapping[str, str]): Request headers
-            request_json (dict[str, Any]): Request payload
-
-        Returns:
-            Tuple[dict[str, Any], Optional[Mapping[str, str]]]: Response data and headers
-        """
-        payload = dict(request_json)
-
-        # Add model to payload if not present
-        if "model" not in payload:
-            payload["model"] = self.model
-
-        async with session.post(
-            self.request_url, headers=headers, json=payload
-        ) as response:
-            data = await response.json()
-            return data, response.headers
 
     def parse_error(self, payload: dict[str, Any]) -> Optional[str]:
         """
         Parse error from Cohere API response.
 
-        Cohere error format: {"message": "error description"}
+        Cohere error format (per official docs):
+        {
+            "id": "string",
+            "message": "string"
+        }
+
+        All error status codes (400, 401, 402, 404, 429, 499, 500) use this format.
+
+        See: https://docs.cohere.com/reference/errors
 
         Args:
             payload (dict[str, Any]): API response payload
@@ -142,11 +96,11 @@ class CohereProvider(Provider):
         Returns:
             Optional[str]: Error message if present, None otherwise
         """
-        # Check for standard error message field
+        # Check for standard error message field (per Cohere docs)
         if "message" in payload:
             return str(payload["message"])
 
-        # Check for explicit error field
+        # Fallback: check for error field (defensive, not in official docs)
         error = payload.get("error")
         if error:
             if isinstance(error, dict):
@@ -154,35 +108,6 @@ class CohereProvider(Provider):
             return str(error)
 
         return None
-
-    def is_rate_limited(
-        self,
-        payload: dict[str, Any],
-        headers: Optional[Mapping[str, str]] = None,
-    ) -> bool:
-        """
-        Detect rate limiting from Cohere API response.
-
-        Checks for:
-        - "rate limit" or "too many requests" in error message
-        - HTTP 429 status code from headers
-
-        Args:
-            payload (dict[str, Any]): API response payload
-            headers (Optional[Mapping[str, str]]): Response headers
-
-        Returns:
-            bool: True if rate limited, False otherwise
-        """
-        # Check status code from headers
-        if headers:
-            status = headers.get("status")
-            if status == "429":
-                return True
-
-        # Check error message
-        error_msg = (self.parse_error(payload) or "").lower()
-        return "rate limit" in error_msg or "too many requests" in error_msg
 
     def extract_usage(self, payload: dict[str, Any]) -> Optional[Usage]:
         """

@@ -21,7 +21,7 @@ from callm.core.models import (
 )
 from callm.core.rate_limit import TokenBucket
 from callm.core.retry import Backoff
-from callm.providers.base import Provider
+from callm.providers.base import BaseProvider
 from callm.utils import task_id_generator_function, validate_jsonl_file
 
 """
@@ -116,7 +116,7 @@ class APIRequest:
     async def call_api(
         self,
         session: ClientSession,
-        provider: Provider,
+        provider: BaseProvider,
         headers: dict[str, str],
         retry_queue: asyncio.Queue["APIRequest"],
         status: StatusTracker,
@@ -358,7 +358,7 @@ def _log_summary(
 
 
 async def _process_requests_internal(
-    provider: Provider,
+    provider: BaseProvider,
     request_iterator: Iterator[dict[str, Any]],
     total_requests: int,
     rate_limit: RateLimitConfig,
@@ -458,7 +458,7 @@ async def _process_requests_internal(
 
 
 async def process_api_requests_from_file(
-    provider: Provider,
+    provider: BaseProvider,
     requests_file: str,
     rate_limit: RateLimitConfig,
     retry: RetryConfig | None = None,
@@ -550,7 +550,7 @@ async def process_api_requests_from_file(
 
 
 async def process_api_requests(
-    provider: Provider,
+    provider: BaseProvider,
     requests: list[dict[str, Any]],
     rate_limit: RateLimitConfig,
     retry: RetryConfig | None = None,

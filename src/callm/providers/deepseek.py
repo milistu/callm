@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any, Optional
 
-from aiohttp import ClientSession
-
-from callm.providers.base import Provider
+from callm.providers.base import BaseProvider
 from callm.providers.models import Usage
 from callm.tokenizers.deepseek import (
     get_deepseek_tokenizer,
     num_tokens_from_deepseek_request,
 )
-from callm.utils import api_endpoint_from_url
 
 
-class DeepSeekProvider(Provider):
+class DeepSeekProvider(BaseProvider):
     """
     Provider implementation for DeepSeek API.
 
@@ -69,20 +66,6 @@ class DeepSeekProvider(Provider):
                 f"Failed to initialize tokenizer for model '{model}': {e}"
             ) from e
 
-    def build_headers(self) -> dict[str, str]:
-        """
-        Build authentication headers for DeepSeek API.
-
-        DeepSeek uses Bearer token authentication (OpenAI-compatible).
-
-        Returns:
-            dict[str, str]: Headers with Authorization and Content-Type
-        """
-        return {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-
     def estimate_input_tokens(self, request_json: dict[str, Any]) -> int:
         """
         Estimate input tokens using DeepSeek's tokenizer.
@@ -95,54 +78,14 @@ class DeepSeekProvider(Provider):
         Returns:
             int: Estimated number of input tokens
         """
-        # Extract endpoint from URL (e.g., "chat/completions")
-        try:
-            endpoint = api_endpoint_from_url(self.request_url)
-        except ValueError:
-            # Fallback: try to extract last part
-            endpoint = self.request_url.rstrip("/").split("/")[-1]
-            # If just "completions", prepend "chat/"
-            if endpoint == "completions" and "chat" in self.request_url:
-                endpoint = "chat/completions"
-
+        endpoint = self._extract_endpoint()
         return num_tokens_from_deepseek_request(request_json, endpoint, self.tokenizer)
-
-    async def send(
-        self,
-        session: ClientSession,
-        headers: Mapping[str, str],
-        request_json: dict[str, Any],
-    ) -> Tuple[dict[str, Any], Optional[Mapping[str, str]]]:
-        """
-        Send request to DeepSeek API.
-
-        Automatically adds model to payload if not present.
-
-        Args:
-            session (ClientSession): Aiohttp session
-            headers (Mapping[str, str]): Request headers
-            request_json (dict[str, Any]): Request payload
-
-        Returns:
-            Tuple[dict[str, Any], Optional[Mapping[str, str]]]: Response data and headers
-        """
-        payload = dict(request_json)
-
-        # Add model to payload if not present
-        if "model" not in payload:
-            payload["model"] = self.model
-
-        async with session.post(
-            self.request_url, headers=headers, json=payload
-        ) as response:
-            data = await response.json()
-            return data, response.headers
 
     def parse_error(self, payload: dict[str, Any]) -> Optional[str]:
         """
         Parse error from DeepSeek API response.
 
-        DeepSeek uses OpenAI-compatible error format.
+        DeepSeek uses OpenAI-compatible error format (primary format).
         See: https://api-docs.deepseek.com/quick_start/error_codes
 
         Error codes:
@@ -154,13 +97,19 @@ class DeepSeekProvider(Provider):
         - 500: Server Error (server issue)
         - 503: Server Overloaded (high traffic)
 
-        Error response format:
+        Primary error response format (official):
         {
             "error": {
                 "message": "error description",
                 "type": "error_type",
+                "param": null,
                 "code": "error_code"
             }
+        }
+
+        Alternative error format (observed in testing):
+        {
+            "error_msg": "error description string"
         }
 
         Args:
@@ -175,46 +124,6 @@ class DeepSeekProvider(Provider):
         if isinstance(error, dict):
             return str(error.get("message") or error)
         return str(error)
-
-    def is_rate_limited(
-        self,
-        payload: dict[str, Any],
-        headers: Optional[Mapping[str, str]] = None,
-    ) -> bool:
-        """
-        Detect rate limiting from DeepSeek API response.
-
-        Note: DeepSeek does NOT constrain rate limits officially, but may
-        return 429 errors during high traffic. Under high load, requests
-        may take longer but won't fail immediately.
-
-        See: https://api-docs.deepseek.com/quick_start/rate_limit
-
-        Checks for:
-        - HTTP 429 status code
-        - "rate limit" in error message
-
-        Args:
-            payload (dict[str, Any]): API response payload
-            headers (Optional[Mapping[str, str]]): Response headers
-
-        Returns:
-            bool: True if rate limited, False otherwise
-        """
-        # Check status code from headers
-        if headers:
-            status = headers.get("status")
-            if status == "429":
-                return True
-
-        # Check error message
-        error = payload.get("error", {})
-        if isinstance(error, dict):
-            message = str(error.get("message", "")).lower()
-            if "rate limit" in message or "too many requests" in message:
-                return True
-
-        return False
 
     def extract_usage(self, payload: dict[str, Any]) -> Optional[Usage]:
         """

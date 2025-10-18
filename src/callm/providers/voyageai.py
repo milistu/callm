@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any, Optional
 
-from aiohttp import ClientSession
-
-from callm.providers.base import Provider
+from callm.providers.base import BaseProvider
 from callm.providers.models import Usage
 from callm.tokenizers.voyageai import (
     get_voyageai_tokenizer,
     num_tokens_from_voyageai_request,
 )
-from callm.utils import api_endpoint_from_url
 
 
-class VoyageAIProvider(Provider):
+class VoyageAIProvider(BaseProvider):
     """
     Provider implementation for Voyage AI API.
 
@@ -64,20 +61,6 @@ class VoyageAIProvider(Provider):
                 f"Failed to initialize tokenizer for model '{model}': {e}"
             ) from e
 
-    def build_headers(self) -> dict[str, str]:
-        """
-        Build authentication headers for Voyage AI API.
-
-        Voyage AI uses Bearer token authentication.
-
-        Returns:
-            dict[str, str]: Headers with Authorization and Content-Type
-        """
-        return {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-
     def estimate_input_tokens(self, request_json: dict[str, Any]) -> int:
         """
         Estimate input tokens using Voyage AI's tokenizer.
@@ -90,45 +73,8 @@ class VoyageAIProvider(Provider):
         Returns:
             int: Estimated number of input tokens
         """
-        # Extract endpoint from URL (e.g., "v1/embeddings" -> "embeddings")
-        try:
-            endpoint = api_endpoint_from_url(self.request_url)
-        except ValueError:
-            # Fallback: try to extract just the last part
-            endpoint = self.request_url.rstrip("/").split("/")[-1]
-
+        endpoint = self._extract_endpoint()
         return num_tokens_from_voyageai_request(request_json, endpoint, self.tokenizer)
-
-    async def send(
-        self,
-        session: ClientSession,
-        headers: Mapping[str, str],
-        request_json: dict[str, Any],
-    ) -> Tuple[dict[str, Any], Optional[Mapping[str, str]]]:
-        """
-        Send request to Voyage AI API.
-
-        Automatically adds model to payload if not present.
-
-        Args:
-            session (ClientSession): Aiohttp session
-            headers (Mapping[str, str]): Request headers
-            request_json (dict[str, Any]): Request payload
-
-        Returns:
-            Tuple[dict[str, Any], Optional[Mapping[str, str]]]: Response data and headers
-        """
-        payload = dict(request_json)
-
-        # Add model to payload if not present
-        if "model" not in payload:
-            payload["model"] = self.model
-
-        async with session.post(
-            self.request_url, headers=headers, json=payload
-        ) as response:
-            data = await response.json()
-            return data, response.headers
 
     def parse_error(self, payload: dict[str, Any]) -> Optional[str]:
         """
@@ -145,14 +91,12 @@ class VoyageAIProvider(Provider):
         - 500: Server Error (unexpected server issue)
         - 502/503/504: Service Unavailable (high traffic)
 
-        Error response format:
+        Error response format (from API docs):
         {
-            "error": {
-                "message": "error description",
-                "type": "error_type",
-                "code": "error_code"
-            }
+            "detail": "error description string"
         }
+
+        Source: https://docs.voyageai.com/reference/embeddings-api
 
         Args:
             payload (dict[str, Any]): API response payload
@@ -160,7 +104,12 @@ class VoyageAIProvider(Provider):
         Returns:
             Optional[str]: Error message if present, None otherwise
         """
-        # Check for error field
+        # Check for detail field (actual VoyageAI format per their docs)
+        detail = payload.get("detail")
+        if detail:
+            return str(detail)
+
+        # Fallback: check for error field (in case they have multiple formats)
         error = payload.get("error")
         if error:
             if isinstance(error, dict):
@@ -181,46 +130,6 @@ class VoyageAIProvider(Provider):
             return str(error)
 
         return None
-
-    def is_rate_limited(
-        self,
-        payload: dict[str, Any],
-        headers: Optional[Mapping[str, str]] = None,
-    ) -> bool:
-        """
-        Detect rate limiting from Voyage AI API response.
-
-        Checks for:
-        - "rate_limit_exceeded" error type
-        - "rate limit" in error message
-        - HTTP 429 status code from headers
-
-        Args:
-            payload (dict[str, Any]): API response payload
-            headers (Optional[Mapping[str, str]]): Response headers
-
-        Returns:
-            bool: True if rate limited, False otherwise
-        """
-        # Check status code from headers
-        if headers:
-            status = headers.get("status")
-            if status == "429":
-                return True
-
-        # Check error type and message
-        error = payload.get("error", {})
-        if isinstance(error, dict):
-            # Check error type
-            if error.get("type") == "rate_limit_exceeded":
-                return True
-
-            # Check error message
-            message = str(error.get("message", "")).lower()
-            if "rate limit" in message or "too many requests" in message:
-                return True
-
-        return False
 
     def extract_usage(self, payload: dict[str, Any]) -> Optional[Usage]:
         """

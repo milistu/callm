@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict
 
-from callm.providers.base import Provider
+from callm.providers.base import BaseProvider
 from callm.providers.cohere import CohereProvider
 from callm.providers.deepseek import DeepSeekProvider
 from callm.providers.openai import OpenAIProvider
 from callm.providers.voyageai import VoyageAIProvider
 
-ProviderFactory = Callable[..., Provider]
+ProviderFactory = Callable[..., BaseProvider]
 
 _REGISTRY: Dict[str, ProviderFactory] = {
     "openai": lambda **kwargs: OpenAIProvider(**kwargs),
@@ -18,7 +18,7 @@ _REGISTRY: Dict[str, ProviderFactory] = {
 }
 
 
-def get_provider(name: str, **kwargs: Any) -> Provider:
+def get_provider(name: str, **kwargs: Any) -> BaseProvider:
     key = name.lower()
     if key not in _REGISTRY:
         raise ValueError(f"Unknown provider: {name}")

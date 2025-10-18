@@ -37,7 +37,7 @@ from callm.core.models import (
     RequestResult,
     RetryConfig,
 )
-from callm.providers import Provider, get_provider, register_provider
+from callm.providers import BaseProvider, get_provider, register_provider
 from callm.providers.models import Usage
 
 __version__ = "0.1.0"
@@ -56,7 +56,7 @@ __all__ = [
     "RequestResult",
     "Usage",
     # Provider interface
-    "Provider",
+    "BaseProvider",
     "get_provider",
     "register_provider",
     # Version
