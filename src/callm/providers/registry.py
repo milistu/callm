@@ -3,14 +3,16 @@ from __future__ import annotations
 from typing import Any, Callable, Dict
 
 from callm.providers.base import Provider
-from callm.providers.openai import OpenAIProvider
 from callm.providers.cohere import CohereProvider
+from callm.providers.openai import OpenAIProvider
+from callm.providers.voyageai import VoyageAIProvider
 
 ProviderFactory = Callable[..., Provider]
 
 _REGISTRY: Dict[str, ProviderFactory] = {
     "openai": lambda **kwargs: OpenAIProvider(**kwargs),
     "cohere": lambda **kwargs: CohereProvider(**kwargs),
+    "voyageai": lambda **kwargs: VoyageAIProvider(**kwargs),
 }
 
 
