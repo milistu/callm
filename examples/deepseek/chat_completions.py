@@ -31,9 +31,9 @@ provider = DeepSeekProvider(
     request_url="https://api.deepseek.com/chat/completions",
 )
 
-# Create a file with 100 requests
+# Create a file with 1000 requests
 with open("data/deepseek_chat_requests.jsonl", "w") as f:
-    for i in range(100):
+    for i in range(1000):
         f.write(
             json.dumps(
                 {

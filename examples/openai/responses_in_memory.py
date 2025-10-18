@@ -12,9 +12,9 @@ from callm.providers import OpenAIProvider
 load_dotenv()
 
 # Find what is your Tier and copy the values from model page: https://platform.openai.com/docs/models/gpt-4.1-nano
-# Tier 1:
-TPM = 200_000
-RPM = 500
+# Tier 2:
+TPM = 2_000_000
+RPM = 5_000
 
 provider = OpenAIProvider(
     api_key=os.getenv("OPENAI_API_KEY"),
