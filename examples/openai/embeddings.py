@@ -1,13 +1,14 @@
 import asyncio
+import json
 import os
 
 from dotenv import load_dotenv
 
 from callm import (
-    process_api_requests_from_file,
     FilesConfig,
     RateLimitConfig,
     RetryConfig,
+    process_api_requests_from_file,
 )
 from callm.providers import OpenAIProvider
 
@@ -24,19 +25,33 @@ provider = OpenAIProvider(
     request_url="https://api.openai.com/v1/embeddings",
 )
 
+# Create a file with 1000 requests
+with open("data/openai_embeddings_requests.jsonl", "w") as f:
+    for i in range(1000):
+        f.write(
+            json.dumps(
+                {
+                    "model": "text-embedding-3-small",
+                    "input": f"Number is currently: {i}. And it keeps increasing!",
+                    "metadata": {"row_id": i},
+                }
+            )
+            + "\n"
+        )
+
 
 async def main() -> None:
     await process_api_requests_from_file(
         provider=provider,
-        requests_file="data/example_requests_to_parallel_process_embeddings.jsonl",
+        requests_file="data/openai_embeddings_requests.jsonl",
         rate_limit=RateLimitConfig(
             max_requests_per_minute=RPM * 0.8,  # 80% of your limit
             max_tokens_per_minute=TPM * 0.8,  # 80% of your limit
         ),
         retry=RetryConfig(),
         files=FilesConfig(
-            save_file="data/example_requests_to_parallel_process_results_v2.jsonl",
-            error_file="data/example_requests_to_parallel_process_errors_v2.jsonl",
+            save_file="data/openai_embeddings_results.jsonl",
+            error_file="data/openai_embeddings_errors.jsonl",
         ),
         # logging_level=10,
     )
