@@ -9,19 +9,42 @@ def api_endpoint_from_url(url: str) -> str:
     """
     Extract the API endpoint from a URL.
 
+    Handles various URL patterns:
+    - With version: https://api.provider.com/v1/chat/completions → chat/completions
+    - Without version: https://api.provider.com/chat/completions → chat/completions
+    - Azure: https://xxx.openai.azure.com/openai/deployments/xxx/chat/completions → chat/completions
+
     Args:
         url (str): The URL to extract the API endpoint from.
 
     Returns:
-        str: The API endpoint.
+        str: The API endpoint path.
+
+    Raises:
+        ValueError: If endpoint cannot be extracted from URL.
     """
+    # Pattern 1: Standard versioned URLs (e.g., OpenAI, Cohere, VoyageAI)
+    # https://api.openai.com/v1/chat/completions → chat/completions
+    # https://api.cohere.com/v2/embed → embed
     match = re.search(r"^https://[^/]+/v\d+/(.+)$", url)
-    if match is None:
-        # Try for Azure OpenAI deployment urls
-        match = re.search(r"^https://[^/]+/openai/deployments/[^/]+/(.+?)(\?|$)", url)
-    if match is None:
-        raise ValueError(f"Could not extract API endpoint from URL: {url}")
-    return match[1]
+    if match:
+        return match[1]
+
+    # Pattern 2: Azure OpenAI deployment URLs
+    # https://xxx.openai.azure.com/openai/deployments/gpt-4/chat/completions → chat/completions
+    match = re.search(r"^https://[^/]+/openai/deployments/[^/]+/(.+?)(\?|$)", url)
+    if match:
+        return match[1]
+
+    # Pattern 3: Non-versioned URLs (e.g., DeepSeek)
+    # https://api.deepseek.com/chat/completions → chat/completions
+    # Extract everything after the domain, removing leading slash
+    match = re.search(r"^https://[^/]+/(.+)$", url)
+    if match:
+        return match[1]
+
+    # If none of the patterns match, raise error
+    raise ValueError(f"Could not extract API endpoint from URL: {url}")
 
 
 def task_id_generator_function() -> Generator[int, None, None]:
