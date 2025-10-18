@@ -6,7 +6,7 @@ DEFAULT_MAX_TOKENS = 16
 DEFAULT_N = 1
 
 
-def num_tokens_consumed_from_request(
+def num_tokens_from_openai_request(
     request_json: dict[str, Any],
     api_endpoint: str,
     tokenizer: Encoding,

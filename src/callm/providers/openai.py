@@ -7,7 +7,7 @@ from tiktoken import encoding_for_model
 
 from callm.providers.base import Provider
 from callm.providers.models import Usage
-from callm.tokenizers.openai import num_tokens_consumed_from_request
+from callm.tokenizers.openai import num_tokens_from_openai_request
 from callm.utils import api_endpoint_from_url
 
 """
@@ -92,7 +92,7 @@ class OpenAIProvider(Provider):
         - responses: Counts input content tokens
         """
         endpoint = api_endpoint_from_url(self.request_url)
-        return num_tokens_consumed_from_request(request_json, endpoint, self.tokenizer)
+        return num_tokens_from_openai_request(request_json, endpoint, self.tokenizer)
 
     async def send(
         self,
