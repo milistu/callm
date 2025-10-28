@@ -3,7 +3,7 @@ name = "callm"
 version = "0.1.0"
 description = "Calmly call LLMs in parallel, within rate limits."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
     "aiohttp>=3.12.15",
     "loguru>=0.7.3",
@@ -11,6 +11,16 @@ dependencies = [
     "tiktoken>=0.11.0",
     "tokenizers>=0.22.1",
     "tqdm>=4.67.1",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 
 [project.scripts]
@@ -22,6 +32,11 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "jupyter>=1.1.1",
+    "nox>=2025.10.16",
     "pre-commit>=4.3.0",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=7.0.0",
     "python-dotenv>=1.1.1",
 ]
