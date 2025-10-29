@@ -9,12 +9,18 @@ import requests
 from tokenizers import Tokenizer
 
 
-def get_cohere_tokenizer(model: str) -> Tokenizer:
+def get_cohere_tokenizer(
+    model: str,
+    url: str = "https://storage.googleapis.com/cohere-public/tokenizers",
+    cache_dir: str = ".cache",
+) -> Tokenizer:
     """
     Download and cache the Cohere tokenizer for a specific model.
 
     Args:
         model (str): The Cohere model name (e.g., "embed-v4.0")
+        url (str): The URL of the Cohere tokenizer storage (default: "https://storage.googleapis.com/cohere-public/tokenizers")
+        cache_dir (str): The directory to cache the tokenizers (default: ".cache")
 
     Returns:
         Tokenizer: HuggingFace tokenizer instance
@@ -22,11 +28,14 @@ def get_cohere_tokenizer(model: str) -> Tokenizer:
     Raises:
         ValueError: If tokenizer cannot be downloaded for the model
     """
-    # Cache dir for tokenizers
-    cache_dir = Path("~/.cache/cohere_tokenizers").expanduser()
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    if Path(cache_dir).is_absolute():
+        cache_path = Path(cache_dir) / "cohere_tokenizers"
+    else:
+        cache_path = Path(f"~/{cache_dir}").expanduser() / "cohere_tokenizers"
 
-    cache_file = cache_dir / f"{model}.json"
+    cache_path.mkdir(parents=True, exist_ok=True)
+
+    cache_file = cache_path / f"{model}.json"
 
     if cache_file.exists():
         with open(cache_file, mode="r", encoding="utf-8") as f:
@@ -34,9 +43,7 @@ def get_cohere_tokenizer(model: str) -> Tokenizer:
         return Tokenizer.from_str(tokenizer_json)
 
     # Download tokenizer from Cohere's public storage
-    tokenizer_url = (
-        f"https://storage.googleapis.com/cohere-public/tokenizers/{model}.json"
-    )
+    tokenizer_url = f"{url.rstrip('/')}/{model}.json"
 
     try:
         response = requests.get(tokenizer_url, timeout=30)

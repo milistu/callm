@@ -6,7 +6,7 @@ DEFAULT_MAX_TOKENS = 16
 DEFAULT_N = 1
 
 
-def get_deepseek_tokenizer(model: str) -> Tokenizer:
+def get_deepseek_tokenizer(model: str, namespace: str = "deepseek-ai") -> Tokenizer:
     """
     Download and cache the DeepSeek tokenizer for a specific model.
 
@@ -16,6 +16,7 @@ def get_deepseek_tokenizer(model: str) -> Tokenizer:
     Args:
         model (str): The DeepSeek model name (e.g., "deepseek-chat", "deepseek-reasoner")
                      Maps to "deepseek-ai/DeepSeek-V3.2-Exp" on HuggingFace
+        namespace (str): HuggingFace organization/namespace (e.g., "deepseek-ai")
 
     Returns:
         AutoTokenizer: HuggingFace AutoTokenizer instance
@@ -25,7 +26,7 @@ def get_deepseek_tokenizer(model: str) -> Tokenizer:
     """
     try:
         # DeepSeek models map to the same tokenizer on HuggingFace
-        tokenizer = Tokenizer.from_pretrained(f"deepseek-ai/{model}")
+        tokenizer = Tokenizer.from_pretrained(f"{namespace}/{model}")
     except Exception as e:
         raise ValueError(
             f"Failed to initialize tokenizer for model '{model}'. Error: {e}"

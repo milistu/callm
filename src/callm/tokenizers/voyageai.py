@@ -5,12 +5,13 @@ from typing import Any
 from tokenizers import Tokenizer
 
 
-def get_voyageai_tokenizer(model: str) -> Tokenizer:
+def get_voyageai_tokenizer(model: str, namespace: str = "voyageai") -> Tokenizer:
     """
     Download and cache the Voyage AI tokenizer for a specific model.
 
     Args:
         model (str): The Voyage AI model name (e.g., "voyage-3.5", "voyage-3-large")
+        namespace (str): HuggingFace organization/namespace (e.g., "voyageai")
 
     Returns:
         Tokenizer: HuggingFace tokenizer instance
@@ -19,7 +20,7 @@ def get_voyageai_tokenizer(model: str) -> Tokenizer:
         ValueError: If tokenizer cannot be downloaded for the model
     """
     try:
-        tokenizer = Tokenizer.from_pretrained(f"voyageai/{model}")
+        tokenizer = Tokenizer.from_pretrained(f"{namespace}/{model}")
         return tokenizer
     except Exception as e:
         raise ValueError(
