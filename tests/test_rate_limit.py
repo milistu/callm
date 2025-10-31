@@ -23,7 +23,7 @@ class TestTokenBucket:
             (100.0, 30.0, 70.0),
             (100.0, 100.0, 0.0),
         ],
-    )  # type: ignore
+    )
     def test_consume_tokens_successfully(
         self, capacity: float, consume: float, expected_remaining: float
     ) -> None:
@@ -41,7 +41,7 @@ class TestTokenBucket:
             (100.0, 101.0),
             (100.0, 150.0),
         ],
-    )  # type: ignore
+    )
     def test_consume_fails_when_insufficient_tokens(
         self, capacity: float, consume: float
     ) -> None:
