@@ -22,7 +22,7 @@ from callm.core.models import (
 from callm.core.rate_limit import TokenBucket
 from callm.core.retry import Backoff
 from callm.providers.base import BaseProvider
-from callm.utils import task_id_generator_function, validate_jsonl_file
+from callm.utils import task_id_generator, validate_jsonl_file
 
 """
 Core async engine for parallel API request processing.
@@ -387,7 +387,7 @@ async def _process_requests_internal(
     requests_bucket, tokens_bucket, backoff = _setup_rate_limiting(rate_limit, retry)
 
     queue_of_requests_to_retry: asyncio.Queue[APIRequest] = asyncio.Queue()
-    task_id_generator = task_id_generator_function()
+    generator = task_id_generator()
     next_request: Optional[APIRequest] = None
 
     pbar = tqdm(total=total_requests or None, desc="Completed requests", unit="req")
@@ -401,7 +401,7 @@ async def _process_requests_internal(
                     try:
                         request_json = next(request_iterator)
                         next_request = APIRequest(
-                            task_id=next(task_id_generator),
+                            task_id=next(generator),
                             request_json=request_json,
                             token_consumption=provider.estimate_input_tokens(
                                 request_json

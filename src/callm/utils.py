@@ -47,7 +47,7 @@ def api_endpoint_from_url(url: str) -> str:
     raise ValueError(f"Could not extract API endpoint from URL: {url}")
 
 
-def task_id_generator_function() -> Generator[int, None, None]:
+def task_id_generator() -> Generator[int, None, None]:
     """
     Generate integers 0, 1, 2, and so on.
 
