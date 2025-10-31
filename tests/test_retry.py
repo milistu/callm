@@ -4,7 +4,7 @@ from callm.core.retry import Backoff
 
 
 class TestBackoff:
-    """Test for exponential backoff calculator."""
+    """Tests for exponential backoff calculator."""
 
     def test_exponential_growth_without_jitter(self) -> None:
         """Test that delays grow exponentially when jitter is disabled."""
@@ -38,7 +38,7 @@ class TestBackoff:
         ), "Delays should be within 9-11 seconds"
 
     def test_delay_never_negative(self) -> None:
-        """Test that deplays are never negative, even with extreme jitter."""
+        """Test that delays are never negative, even with extreme jitter."""
         backoff = Backoff(base_delay_seconds=0.1, max_delay_seconds=1.0, jitter=1.0)
 
         delays = [backoff.compute_delay(0) for _ in range(50)]
