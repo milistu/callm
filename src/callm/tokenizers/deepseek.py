@@ -2,9 +2,6 @@ from typing import Any
 
 from tokenizers import Tokenizer
 
-DEFAULT_MAX_TOKENS = 16
-DEFAULT_N = 1
-
 
 def get_deepseek_tokenizer(model: str, namespace: str = "deepseek-ai") -> Tokenizer:
     """
@@ -57,35 +54,31 @@ def num_tokens_from_deepseek_request(
         TypeError: For invalid input types
     """
     if api_endpoint.endswith("completions"):
-        max_tokens: int = request_json.get("max_tokens", DEFAULT_MAX_TOKENS)
-        n: int = request_json.get("n", DEFAULT_N)
-        completion_tokens = n * max_tokens
-
         # Chat completions
         if api_endpoint.startswith("chat/"):
             num_tokens = 0
             for message in request_json.get("messages", []):
                 # Every message follows <im_start>{role/name}\n{content}<im_end>\n
-                num_tokens += 4
+                num_tokens += 3
                 for key, value in message.items():
                     if isinstance(value, str):
                         num_tokens += len(tokenizer.encode(value))
                         if key == "name":
                             # If there's a name, the role is omitted
-                            num_tokens -= 1
+                            num_tokens += 1
 
             # Every reply is primed with <im_start>assistant
-            num_tokens += 2
-            return num_tokens + completion_tokens
+            num_tokens += 3
+            return num_tokens
         else:
             # Standard completions
             prompt = request_json.get("prompt", "")
             if isinstance(prompt, str):
                 prompt_tokens = len(tokenizer.encode(prompt))
-                return prompt_tokens + completion_tokens
+                return prompt_tokens
             elif isinstance(prompt, list):
                 prompt_tokens = sum([len(tokenizer.encode(p)) for p in prompt])
-                return prompt_tokens + completion_tokens * len(prompt)
+                return prompt_tokens
             else:
                 raise TypeError(
                     "Expecting either string or list of strings for 'prompt' field."
