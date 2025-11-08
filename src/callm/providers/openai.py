@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Tuple
+from collections.abc import Mapping
+from typing import Any
 
 from aiohttp import ClientSession
 from tiktoken import encoding_for_model
@@ -50,9 +51,7 @@ class OpenAIProvider(BaseProvider):
 
     name = "openai"
 
-    def __init__(
-        self, api_key: str, model: str, request_url: str, use_azure: bool = False
-    ) -> None:
+    def __init__(self, api_key: str, model: str, request_url: str, use_azure: bool = False) -> None:
         """
         Initialize OpenAI provider.
 
@@ -98,7 +97,7 @@ class OpenAIProvider(BaseProvider):
         session: ClientSession,
         headers: Mapping[str, str],
         request_json: dict[str, Any],
-    ) -> Tuple[dict[str, Any], Optional[Mapping[str, str]]]:
+    ) -> tuple[dict[str, Any], Mapping[str, str] | None]:
         """
         Send request to OpenAI API.
 
@@ -108,13 +107,11 @@ class OpenAIProvider(BaseProvider):
         if not self.use_azure and "model" not in payload:
             payload["model"] = self.model
 
-        async with session.post(
-            self.request_url, headers=headers, json=payload
-        ) as response:
+        async with session.post(self.request_url, headers=headers, json=payload) as response:
             data = await response.json()
             return data, response.headers
 
-    def parse_error(self, payload: dict[str, Any]) -> Optional[str]:
+    def parse_error(self, payload: dict[str, Any]) -> str | None:
         """
         Parse error from OpenAI response.
 
@@ -127,7 +124,7 @@ class OpenAIProvider(BaseProvider):
             return str(error.get("message") or error)
         return str(error)
 
-    def extract_usage(self, payload: dict[str, Any]) -> Optional[Usage]:
+    def extract_usage(self, payload: dict[str, Any]) -> Usage | None:
         """
         Extract token usage from OpenAI response.
 

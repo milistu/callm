@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 
 from callm.utils import append_to_jsonl
 
@@ -30,7 +31,7 @@ def stream_jsonl(filepath: str) -> Generator[dict[str, Any], None, None]:
         json.JSONDecodeError: If a line contains invalid JSON
         FileNotFoundError: If file doesn't exist
     """
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue

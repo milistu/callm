@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Mapping, Optional, Tuple
+from collections.abc import Mapping
+from typing import Any
 
 from aiohttp import ClientSession
 
@@ -90,7 +91,7 @@ class BaseProvider(ABC):
         session: ClientSession,
         headers: Mapping[str, str],
         request_json: dict[str, Any],
-    ) -> Tuple[dict[str, Any], Optional[Mapping[str, str]]]:
+    ) -> tuple[dict[str, Any], Mapping[str, str] | None]:
         """
         Perform the HTTP request to the provider's API.
 
@@ -123,16 +124,14 @@ class BaseProvider(ABC):
         if "model" not in payload:
             payload["model"] = self.model
 
-        async with session.post(
-            self.request_url, headers=headers, json=payload
-        ) as response:
+        async with session.post(self.request_url, headers=headers, json=payload) as response:
             data = await response.json()
             return data, response.headers
 
     def is_rate_limited(
         self,
         payload: dict[str, Any],
-        headers: Optional[Mapping[str, str]] = None,
+        headers: Mapping[str, str] | None = None,
     ) -> bool:
         """
         Determine if the response indicates rate limiting.
@@ -214,7 +213,7 @@ class BaseProvider(ABC):
         ...
 
     @abstractmethod
-    def parse_error(self, payload: dict[str, Any]) -> Optional[str]:
+    def parse_error(self, payload: dict[str, Any]) -> str | None:
         """
         Extract error message from API response payload.
 
@@ -236,7 +235,7 @@ class BaseProvider(ABC):
         ...
 
     @abstractmethod
-    def extract_usage(self, payload: dict[str, Any]) -> Optional[Usage]:
+    def extract_usage(self, payload: dict[str, Any]) -> Usage | None:
         """
         Extract token usage metrics from a successful API response.
 

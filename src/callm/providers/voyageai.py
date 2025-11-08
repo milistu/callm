@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from callm.providers.base import BaseProvider
 from callm.providers.models import Usage
@@ -57,9 +57,7 @@ class VoyageAIProvider(BaseProvider):
         try:
             self.tokenizer = get_voyageai_tokenizer(model)
         except Exception as e:
-            raise ValueError(
-                f"Failed to initialize tokenizer for model '{model}': {e}"
-            ) from e
+            raise ValueError(f"Failed to initialize tokenizer for model '{model}': {e}") from e
 
     def estimate_input_tokens(self, request_json: dict[str, Any]) -> int:
         """
@@ -76,7 +74,7 @@ class VoyageAIProvider(BaseProvider):
         endpoint = self._extract_endpoint()
         return num_tokens_from_voyageai_request(request_json, endpoint, self.tokenizer)
 
-    def parse_error(self, payload: dict[str, Any]) -> Optional[str]:
+    def parse_error(self, payload: dict[str, Any]) -> str | None:
         """
         Parse error from Voyage AI API response.
 
@@ -131,7 +129,7 @@ class VoyageAIProvider(BaseProvider):
 
         return None
 
-    def extract_usage(self, payload: dict[str, Any]) -> Optional[Usage]:
+    def extract_usage(self, payload: dict[str, Any]) -> Usage | None:
         """
         Extract token usage from Voyage AI API response.
 

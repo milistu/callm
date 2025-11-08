@@ -25,9 +25,7 @@ def get_deepseek_tokenizer(model: str, namespace: str = "deepseek-ai") -> Tokeni
         # DeepSeek models map to the same tokenizer on HuggingFace
         tokenizer = Tokenizer.from_pretrained(f"{namespace}/{model}")
     except Exception as e:
-        raise ValueError(
-            f"Failed to initialize tokenizer for model '{model}'. Error: {e}"
-        ) from e
+        raise ValueError(f"Failed to initialize tokenizer for model '{model}'. Error: {e}") from e
     return tokenizer
 
 
@@ -80,9 +78,7 @@ def num_tokens_from_deepseek_request(
                 prompt_tokens = sum([len(tokenizer.encode(p)) for p in prompt])
                 return prompt_tokens
             else:
-                raise TypeError(
-                    "Expecting either string or list of strings for 'prompt' field."
-                )
+                raise TypeError("Expecting either string or list of strings for 'prompt' field.")
     else:
         raise NotImplementedError(
             f'API endpoint "{api_endpoint}" not yet implemented for DeepSeek provider. '

@@ -41,7 +41,8 @@ def num_tokens_from_openai_request(
                 return prompt_tokens
             else:
                 raise TypeError(
-                    'Expecting either string or list of strings for "prompt" field in completion request.'
+                    'Expecting either string or list of strings for "prompt" field'
+                    "in completion request."
                 )
     elif api_endpoint == "embeddings":
         input = request_json["input"]
@@ -60,9 +61,7 @@ def num_tokens_from_openai_request(
         if isinstance(input, str):  # single input string
             num_tokens = len(tokenizer.encode(input))
             return num_tokens
-        elif isinstance(
-            input, list
-        ):  # array of message objects (similar to chat completions)
+        elif isinstance(input, list):  # array of message objects (similar to chat completions)
             num_tokens = 0
             for item in input:
                 if isinstance(item, dict):
@@ -74,21 +73,15 @@ def num_tokens_from_openai_request(
                         elif isinstance(content, list):
                             # Handle content array with different types (text, images, etc.)
                             for content_item in content:
-                                if (
-                                    isinstance(content_item, dict)
-                                    and "text" in content_item
-                                ):
-                                    num_tokens += len(
-                                        tokenizer.encode(content_item["text"])
-                                    )
+                                if isinstance(content_item, dict) and "text" in content_item:
+                                    num_tokens += len(tokenizer.encode(content_item["text"]))
                                 elif (
                                     isinstance(content_item, dict)
                                     and content_item.get("type") == "input_text"
                                 ):
-                                    num_tokens += len(
-                                        tokenizer.encode(content_item["text"])
-                                    )
-                    # Add tokens for role and message structure overhead (similar to chat completions)
+                                    num_tokens += len(tokenizer.encode(content_item["text"]))
+                    # Add tokens for role and message structure overhead
+                    # (similar to chat completions)
                     num_tokens += 4  # every message follows similar structure
                     for key, value in item.items():
                         if key != "content" and isinstance(value, str):
@@ -103,5 +96,6 @@ def num_tokens_from_openai_request(
             )
     else:
         raise NotImplementedError(
-            f'API endpoint "{api_endpoint}" not yet implemented in this library, please submit an issue at https://github.com/milistu/callm/issues.'
+            f'API endpoint "{api_endpoint}" not yet implemented in this library, '
+            f"please submit an issue at https://github.com/milistu/callm/issues."
         )

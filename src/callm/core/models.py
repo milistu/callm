@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -15,7 +15,7 @@ class RateLimitConfig:
     """
 
     max_requests_per_minute: float
-    max_tokens_per_minute: Optional[float]
+    max_tokens_per_minute: float | None
 
 
 @dataclass
@@ -64,9 +64,9 @@ class RequestResult:
     """
 
     request: dict[str, Any]
-    response: Optional[dict[str, Any]] = None
-    error: Optional[str] = None
-    metadata: Optional[dict[str, Any]] = None
+    response: dict[str, Any] | None = None
+    error: str | None = None
+    metadata: dict[str, Any] | None = None
     attempts: int = 1
 
 

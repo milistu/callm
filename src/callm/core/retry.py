@@ -43,9 +43,7 @@ class Backoff:
         Returns:
             float: Delay in seconds (always >= 0)
         """
-        delay = min(
-            self.max_delay_seconds, self.base_delay_seconds * (2**attempt_index)
-        )
+        delay = min(self.max_delay_seconds, self.base_delay_seconds * (2**attempt_index))
         noise = delay * self.jitter * (2 * random.random() - 1)
         result: float = max(0.0, delay + noise)
         return result

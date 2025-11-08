@@ -23,9 +23,7 @@ def get_voyageai_tokenizer(model: str, namespace: str = "voyageai") -> Tokenizer
         tokenizer = Tokenizer.from_pretrained(f"{namespace}/{model}")
         return tokenizer
     except Exception as e:
-        raise ValueError(
-            f"Failed to initialize tokenizer for model '{model}': {e}"
-        ) from e
+        raise ValueError(f"Failed to initialize tokenizer for model '{model}': {e}") from e
 
 
 def num_tokens_from_voyageai_request(
@@ -65,8 +63,7 @@ def num_tokens_from_voyageai_request(
             )
         else:
             raise TypeError(
-                f"Unexpected input type: {type(input_data)}. "
-                "Expected string or list of strings."
+                f"Unexpected input type: {type(input_data)}. " "Expected string or list of strings."
             )
 
         return num_tokens

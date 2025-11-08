@@ -33,7 +33,7 @@ class TokenBucket:
     last_update_time: float
 
     @classmethod
-    def start(cls, capacity_per_minute: float) -> "TokenBucket":
+    def start(cls, capacity_per_minute: float) -> TokenBucket:
         """
         Create a new token bucket starting at full capacity.
 

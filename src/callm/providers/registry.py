@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict
+from collections.abc import Callable
+from typing import Any
 
 from callm.providers.base import BaseProvider
 from callm.providers.cohere import CohereProvider
@@ -10,7 +11,7 @@ from callm.providers.voyageai import VoyageAIProvider
 
 ProviderFactory = Callable[..., BaseProvider]
 
-_REGISTRY: Dict[str, ProviderFactory] = {
+_REGISTRY: dict[str, ProviderFactory] = {
     "openai": lambda **kwargs: OpenAIProvider(**kwargs),
     "cohere": lambda **kwargs: CohereProvider(**kwargs),
     "voyageai": lambda **kwargs: VoyageAIProvider(**kwargs),

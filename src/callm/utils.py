@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 
 
 def api_endpoint_from_url(url: str) -> str:

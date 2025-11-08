@@ -1,4 +1,7 @@
-"""Note: Cohere does not have TPM limits, so we don't need to worry about that here. However, here is an implementation of the tokenizer for reference if they add it later."""
+"""
+Note: Cohere does not have TPM limits, so we don't need to worry about that here.
+However, here is an implementation of the tokenizer for reference if they add it later.
+"""
 
 from __future__ import annotations
 
@@ -38,7 +41,7 @@ def get_cohere_tokenizer(
     cache_file = cache_path / f"{model}.json"
 
     if cache_file.exists():
-        with open(cache_file, mode="r", encoding="utf-8") as f:
+        with open(cache_file, encoding="utf-8") as f:
             tokenizer_json = f.read()
         return Tokenizer.from_str(tokenizer_json)
 
