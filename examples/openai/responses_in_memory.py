@@ -26,7 +26,10 @@ provider = OpenAIProvider(
 requests = [
     {
         "model": "gpt-4.1-nano-2025-04-14",
-        "input": f"This is an example number {i}: Multiple this number {i} by 3 and return the result",
+        "input": (
+            f"This is an example number {i}: "
+            f"Multiple this number {i} by 3 and return the result"
+        ),
         "metadata": {"row_id": i},
     }
     for i in range(1000)
@@ -47,15 +50,6 @@ async def main() -> None:
     print("\nProcessing complete!")
     print(f"Successful: {results.stats.successful}")
     print(f"Failed: {results.stats.failed}")
-
-    # Optional: Save results to file
-    # with open("data/example_requests_to_parallel_process_results_llm_in_memory.jsonl", "w") as f:
-    #     for result in results.successes:
-    #         f.write(json.dumps(result.response) + "\n")
-    # if results.failures:
-    #     with open("data/example_requests_to_parallel_process_errors_llm_in_memory.jsonl", "w") as f:
-    #         for result in results.failures:
-    #             f.write(json.dumps(result.error) + "\n")
 
 
 if __name__ == "__main__":

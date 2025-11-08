@@ -32,7 +32,10 @@ with open("data/openai_responses_requests.jsonl", "w") as f:
             json.dumps(
                 {
                     "model": "gpt-4.1-nano-2025-04-14",
-                    "input": f"This is an example number {i}: Multiple this number {i} by 3 and return the result",
+                    "input": (
+                        f"This is an example number {i}: "
+                        f"Multiple this number {i} by 3 and return the result"
+                    ),
                     "metadata": {"row_id": i},
                 }
             )
