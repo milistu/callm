@@ -26,11 +26,14 @@ jobs:
                 enable-cache: true
                 cache-dependency-glob: "uv.lock"
 
+            - name: Install dependencies
+              run: uv sync --dev
+
             - name: Get Python versions from noxfile
               id: python-versions
               shell: bash
               run: |
-                VERSIONS=$(python -c "
+                VERSIONS=$(uv run python -c "
                 import sys
                 sys.path.insert(0, '.')
                 from noxfile import PYTHON_VERSIONS
@@ -40,9 +43,6 @@ jobs:
 
             - name: Install Python versions
               run: uv python install ${{ steps.python-versions.outputs.versions }}
-
-            - name: Install dependencies
-              run: uv sync --dev
 
             - name: Run tests
               run: uv run nox -s tests
