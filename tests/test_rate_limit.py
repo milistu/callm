@@ -42,9 +42,7 @@ class TestTokenBucket:
             (100.0, 150.0),
         ],
     )
-    def test_consume_fails_when_insufficient_tokens(
-        self, capacity: float, consume: float
-    ) -> None:
+    def test_consume_fails_when_insufficient_tokens(self, capacity: float, consume: float) -> None:
         """Test that consumption fails when not enough tokens available."""
         bucket = TokenBucket.start(capacity_per_minute=capacity)
 
@@ -77,9 +75,7 @@ class TestTokenBucket:
 
         bucket.last_update_time -= 2.0  # 2 seconds ago
         bucket.refill()
-        assert (
-            bucket.available >= 1.5
-        )  # 60 tokens per minute / 60 seconds = 1 token per second
+        assert bucket.available >= 1.5  # 60 tokens per minute / 60 seconds = 1 token per second
         assert bucket.available <= 2.5  # but not more than 2 tokens
 
     def test_refill_does_not_exceed_capacity(self) -> None:

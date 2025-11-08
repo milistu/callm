@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from unittest.mock import Mock
 
 import pytest
@@ -9,7 +10,6 @@ from callm.tokenizers import (
     num_tokens_from_openai_request,
     num_tokens_from_voyageai_request,
 )
-from typing import Generator
 
 
 class TestOpenAITokenizer:
@@ -34,9 +34,7 @@ class TestOpenAITokenizer:
 
         assert num_tokens_estimated > num_tokens, "Should count message overhead"
 
-    def test_completions_with_string_and_list(
-        self, tokenizer: tiktoken.Encoding
-    ) -> None:
+    def test_completions_with_string_and_list(self, tokenizer: tiktoken.Encoding) -> None:
         """Test completions handles both string and list prompts."""
         message = "Hello World"
         request_string = {"prompt": message}
@@ -56,16 +54,12 @@ class TestOpenAITokenizer:
             tokenizer=tokenizer,
         )
 
-        assert (
-            tokens_estimated_string == num_tokens_string
-        ), "Should count single string correctly"
+        assert tokens_estimated_string == num_tokens_string, "Should count single string correctly"
         assert (
             tokens_estimated_list == num_tokens_string * 2
         ), "Should count list of strings correctly"
 
-    def test_embeddings_with_string_and_list(
-        self, tokenizer: tiktoken.Encoding
-    ) -> None:
+    def test_embeddings_with_string_and_list(self, tokenizer: tiktoken.Encoding) -> None:
         """Test embeddings handles both string and list inputs."""
         message = "Hello World"
         request_string = {"input": message}
@@ -85,9 +79,7 @@ class TestOpenAITokenizer:
             tokenizer=tokenizer,
         )
 
-        assert (
-            tokens_estimated_string == num_tokens_string
-        ), "Should count single string correctly"
+        assert tokens_estimated_string == num_tokens_string, "Should count single string correctly"
         assert (
             tokens_estimated_list == num_tokens_string * 2
         ), "Should count list of strings correctly"
@@ -112,16 +104,10 @@ class TestOpenAITokenizer:
             tokenizer=tokenizer,
         )
 
-        assert (
-            tokens_estimated_string == num_tokens_string
-        ), "Should count single string correctly"
-        assert (
-            tokens_estimated_dict > num_tokens_string
-        ), "Should count message object correctly"
+        assert tokens_estimated_string == num_tokens_string, "Should count single string correctly"
+        assert tokens_estimated_dict > num_tokens_string, "Should count message object correctly"
 
-    def test_unsupported_endpoint_raises_error(
-        self, tokenizer: tiktoken.Encoding
-    ) -> None:
+    def test_unsupported_endpoint_raises_error(self, tokenizer: tiktoken.Encoding) -> None:
         """Test that unsupported endpoints raise NotImplementedError."""
         request = {"input": "test"}
 
@@ -134,9 +120,7 @@ class TestOpenAITokenizer:
 
         assert "not yet implemented" in str(exc_info.value).lower()
 
-    def test_completions_invalid_prompt_type(
-        self, tokenizer: tiktoken.Encoding
-    ) -> None:
+    def test_completions_invalid_prompt_type(self, tokenizer: tiktoken.Encoding) -> None:
         """Test completions raises TypeError for invalid prompt type."""
         request = {"prompt": 123}
 
@@ -216,9 +200,7 @@ class TestDeepSeekTokenizer:
             tokenizer=tokenizer,
         )
 
-        assert (
-            tokens_estimated_string == num_tokens_string
-        ), "Should count single string correctly"
+        assert tokens_estimated_string == num_tokens_string, "Should count single string correctly"
         assert (
             tokens_estimated_list == num_tokens_string * 2
         ), "Should count list of strings correctly"
@@ -280,9 +262,7 @@ class TestVoyageAITokenizer:
             tokenizer=tokenizer,
         )
 
-        assert (
-            tokens_estimated_string == num_tokens_string
-        ), "Should count single string correctly"
+        assert tokens_estimated_string == num_tokens_string, "Should count single string correctly"
         assert (
             tokens_estimated_list == num_tokens_string * 2
         ), "Should count list of strings correctly"

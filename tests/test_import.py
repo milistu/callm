@@ -17,8 +17,6 @@ def test_can_import_core_modules() -> None:
 
 def test_can_import_providers() -> None:
     """Test that provider modules can be imported."""
-    from callm.providers import base, openai, cohere, deepseek, voyageai
+    from callm.providers import base, cohere, deepseek, openai, voyageai
 
-    assert all(
-        [base, openai, cohere, deepseek, voyageai]
-    ), "Provider modules cannot be imported"
+    assert all([base, openai, cohere, deepseek, voyageai]), "Provider modules cannot be imported"
