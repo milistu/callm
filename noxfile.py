@@ -57,7 +57,7 @@ def lint(session: nox.Session) -> None:
 def type_check(session: nox.Session) -> None:
     """Run type checking with mypy."""
     # Install mypy and dependencies
-    session.install("mypy", "types-requests")
+    session.install("mypy", "types-requests", "types-tqdm")
     session.install(".")
 
     # Run mypy

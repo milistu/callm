@@ -1,0 +1,72 @@
+name: CI
+
+on:
+    push:
+        branches: [main, develop]
+    pull_request:
+        branches: [main, develop]
+
+jobs:
+    test:
+        name: Test on ${{ matrix.os }}
+        runs-on: ${{ matrix.os }}
+
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v5
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v6
+              with:
+                enable-cache: true
+                cache-dependency-glob: "uv.lock"
+
+            - name: Get Python versions from noxfile
+              id: python-versions
+              shell: bash
+              run: |
+                VERSIONS=$(python -c "
+                import sys
+                sys.path.insert(0, '.')
+                from noxfile import PYTHON_VERSIONS
+                print(' '.join(PYTHON_VERSIONS))
+                ")
+                echo "versions=$VERSIONS" >> $GITHUB_OUTPUT
+
+            - name: Install Python versions
+              run: uv python install ${{ steps.python-versions.outputs.versions }}
+
+            - name: Install dependencies
+              run: uv sync --dev
+
+            - name: Run tests
+              run: uv run nox -s tests
+
+
+    lint:
+        name: Code Quality
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v5
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v6
+
+            - name: Set up Python
+              run: uv python install 3.13
+
+            - name: Install dependencies
+              run: uv sync --dev
+
+            - name: Run lint
+              run: uv run nox -s lint
+
+            - name: Run type check
+              run: uv run nox -s type_check
