@@ -95,7 +95,7 @@ def validate_jsonl_file(filepath: str, file_type: str = "File") -> None:
 
 
 def pydantic_to_openai_response_format(
-    model: BaseModel,
+    model: type[BaseModel],
     method: Literal["completions", "chat/completions", "responses"],
     strict: bool = True,
 ) -> dict[str, Any]:
