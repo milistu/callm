@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Generator
-from typing import Any
+from typing import Any, Literal
+
+from pydantic import BaseModel
 
 
 def api_endpoint_from_url(url: str) -> str:
@@ -90,3 +92,42 @@ def validate_jsonl_file(filepath: str, file_type: str = "File") -> None:
     """
     if not filepath.endswith(".jsonl"):
         raise ValueError(f"{file_type} must be a JSONL file")
+
+
+def pydantic_to_openai_response_format(
+    model: BaseModel,
+    method: Literal["completions", "chat/completions", "responses"],
+    strict: bool = True,
+) -> dict[str, Any]:
+    """
+    Convert a Pydantic model to an OpenAI response_format configuration.
+
+    Args:
+        model: The Pydantic model to convert
+        method: Explicitly specify "chat/completions", "completions" or "responses"
+        strict: Whether to include strict mode (required for Structured Outputs)
+
+    Returns:
+        dict: The OpenAI JSON schema format
+    """
+    json_schema_content = model.model_json_schema()
+    if json_schema_content.get("type") == "object":
+        json_schema_content["additionalProperties"] = False
+
+    json_schema_spec = {
+        "name": model.__name__,
+        "schema": json_schema_content,
+        "strict": strict,
+    }
+    if method in ["completions", "chat/completions"]:
+        return {
+            "type": "json_schema",
+            "json_schema": json_schema_spec,
+        }
+    elif method == "responses":
+        return {
+            "type": "json_schema",
+            **json_schema_spec,
+        }
+    else:
+        raise ValueError(f"Invalid method: {method}")
