@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from tokenizers import Tokenizer
@@ -61,12 +62,21 @@ def num_tokens_from_deepseek_request(
                 for key, value in message.items():
                     if isinstance(value, str):
                         num_tokens += len(tokenizer.encode(value))
-                        if key == "name":
-                            # If there's a name, the role is omitted
+                        if key == "name":  # If there's a name, the role is omitted
                             num_tokens += 1
 
             # Every reply is primed with <im_start>assistant
             num_tokens += 3
+
+            # Add tokens from response_format (Structured Outputs)
+            response_format = request_json.get("response_format")
+            if response_format and isinstance(response_format, dict):
+                if response_format.get("type") == "json_schema":
+                    json_schema = response_format.get("json_schema")
+                    if json_schema:
+                        schema_str = json.dumps(json_schema["schema"], separators=(",", ":"))
+                        num_tokens += len(tokenizer.encode(schema_str))
+
             return num_tokens
         else:
             # Standard completions

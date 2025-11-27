@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from tiktoken import Encoding
@@ -23,13 +24,23 @@ def num_tokens_from_openai_request(
     if api_endpoint.endswith("completions"):
         if api_endpoint.startswith("chat/"):
             num_tokens = 0
-            for message in request_json["messages"]:
+            for message in request_json.get("messages", []):
                 num_tokens += 3  # Every message follows <im_start>{role/name}\n{content}<im_end>\n
                 for key, value in message.items():
                     num_tokens += len(tokenizer.encode(value))
                     if key == "name":  # If there's a name, the role is omitted
                         num_tokens += 1  # Role is always required and always 1 token
             num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
+
+            # Add tokens from response_format (Structured Outputs)
+            response_format = request_json.get("response_format")
+            if response_format and isinstance(response_format, dict):
+                if response_format.get("type") == "json_schema":
+                    json_schema = response_format.get("json_schema")
+                    if json_schema:
+                        schema_str = json.dumps(json_schema["schema"], separators=(",", ":"))
+                        num_tokens += len(tokenizer.encode(schema_str))
+
             return num_tokens
         else:
             prompt = request_json["prompt"]
@@ -81,7 +92,6 @@ def num_tokens_from_openai_request(
                                 ):
                                     num_tokens += len(tokenizer.encode(content_item["text"]))
                     # Add tokens for role and message structure overhead
-                    # (similar to chat completions)
                     num_tokens += 4  # every message follows similar structure
                     for key, value in item.items():
                         if key != "content" and isinstance(value, str):
@@ -89,11 +99,21 @@ def num_tokens_from_openai_request(
                 elif isinstance(item, str):
                     # Handle simple string items in the array
                     num_tokens += len(tokenizer.encode(item))
-            return num_tokens
         else:
             raise TypeError(
                 'Expecting either string or list for "input" field in responses request.'
             )
+
+        # Add tokens from text.format (Structured Outputs)
+        text_options = request_json.get("text")
+        if text_options and isinstance(text_options, dict):
+            format = text_options.get("format")
+            if format and isinstance(format, dict):
+                if format.get("type") == "json_schema":
+                    format_str = json.dumps(format["schema"], separators=(",", ":"))
+                    num_tokens += len(tokenizer.encode(format_str))
+
+        return num_tokens
     else:
         raise NotImplementedError(
             f'API endpoint "{api_endpoint}" not yet implemented in this library, '
