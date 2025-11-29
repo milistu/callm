@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 from callm import (
     RateLimitConfig,
-    process_api_requests_from_file,
+    process_requests,
 )
 from callm.providers import DeepSeekProvider
 
@@ -32,8 +32,10 @@ provider = DeepSeekProvider(
 )
 
 # Create a file with 1000 requests
-with open("data/deepseek_chat_requests.jsonl", "w") as f:
-    for i in range(1000):
+num_requests = 1_000
+requests_path = "data/deepseek_completions_requests.jsonl"
+with open(requests_path, mode="w", encoding="utf-8") as f:
+    for i in range(num_requests):
         f.write(
             json.dumps(
                 {
@@ -55,14 +57,18 @@ with open("data/deepseek_chat_requests.jsonl", "w") as f:
 
 
 async def main() -> None:
-    await process_api_requests_from_file(
+    results = await process_requests(
         provider=provider,
-        requests_file="data/deepseek_chat_requests.jsonl",
+        requests="data/deepseek_completions_requests.jsonl",
         rate_limit=RateLimitConfig(
             max_requests_per_minute=RPM * 0.8,  # 80% of your limit
             max_tokens_per_minute=TPM * 0.8,  # 80% of your limit
         ),
+        output_path="data/deepseek_completions_results.jsonl",
     )
+
+    print(f"Finished in {results.stats.duration_seconds:.2f}s")
+    print(f"Success: {results.stats.successful}, Failed: {results.stats.failed}")
 
 
 if __name__ == "__main__":

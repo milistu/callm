@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 from callm import (
     RateLimitConfig,
-    process_api_requests_from_file,
+    process_requests,
 )
 from callm.providers import CohereProvider
 
@@ -41,14 +41,18 @@ with open("data/cohere_embed_requests.jsonl", "w") as f:
 
 
 async def main() -> None:
-    await process_api_requests_from_file(
+    results = await process_requests(
         provider=provider,
-        requests_file="data/cohere_embed_requests.jsonl",
+        requests="data/cohere_embed_requests.jsonl",
         rate_limit=RateLimitConfig(
             max_requests_per_minute=RPM * 0.8,
             max_tokens_per_minute=TPM,
         ),
+        output_path="data/cohere_embed_results.jsonl",
     )
+
+    print(f"Finished in {results.stats.duration_seconds:.2f}s")
+    print(f"Success: {results.stats.successful}, Failed: {results.stats.failed}")
 
 
 if __name__ == "__main__":

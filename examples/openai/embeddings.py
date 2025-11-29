@@ -5,10 +5,9 @@ import os
 from dotenv import load_dotenv
 
 from callm import (
-    FilesConfig,
     RateLimitConfig,
     RetryConfig,
-    process_api_requests_from_file,
+    process_requests,
 )
 from callm.providers import OpenAIProvider
 
@@ -41,20 +40,19 @@ with open("data/openai_embeddings_requests.jsonl", "w") as f:
 
 
 async def main() -> None:
-    await process_api_requests_from_file(
+    results = await process_requests(
         provider=provider,
-        requests_file="data/openai_embeddings_requests.jsonl",
+        requests="data/openai_embeddings_requests.jsonl",
         rate_limit=RateLimitConfig(
             max_requests_per_minute=RPM * 0.8,  # 80% of your limit
             max_tokens_per_minute=TPM * 0.8,  # 80% of your limit
         ),
         retry=RetryConfig(),
-        files=FilesConfig(
-            save_file="data/openai_embeddings_results.jsonl",
-            error_file="data/openai_embeddings_errors.jsonl",
-        ),
-        # logging_level=10,
+        output_path="data/openai_embeddings_results.jsonl",
     )
+
+    print(f"Finished in {results.stats.duration_seconds:.2f}s")
+    print(f"Success: {results.stats.successful}, Failed: {results.stats.failed}")
 
 
 if __name__ == "__main__":

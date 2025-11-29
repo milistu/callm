@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from callm import (
     RateLimitConfig,
-    process_api_requests,
+    process_requests,
 )
 from callm.providers import OpenAIProvider
 from callm.utils import pydantic_to_openai_response_format
@@ -59,7 +59,7 @@ for i in range(num_requests):
 
 
 async def main() -> None:
-    responses = await process_api_requests(
+    results = await process_requests(
         provider=provider,
         requests=requests,
         rate_limit=RateLimitConfig(
@@ -69,7 +69,7 @@ async def main() -> None:
     )
     # Check if responses are JSON serializable
     num_failures = 0
-    for sample in responses.successes:
+    for sample in results.successes:
         try:
             json.loads(sample.response["choices"][0]["message"]["content"])
         except json.JSONDecodeError:

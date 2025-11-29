@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 from callm import (
     RateLimitConfig,
-    process_api_requests,
+    process_requests,
 )
 from callm.providers import OpenAIProvider
 
@@ -37,7 +37,7 @@ requests = [
 
 
 async def main() -> None:
-    results = await process_api_requests(
+    results = await process_requests(
         provider=provider,
         requests=requests,
         rate_limit=RateLimitConfig(
@@ -46,10 +46,8 @@ async def main() -> None:
         ),
     )
 
-    # Print summary
-    print("\nProcessing complete!")
-    print(f"Successful: {results.stats.successful}")
-    print(f"Failed: {results.stats.failed}")
+    print(f"Finished in {results.stats.duration_seconds:.2f}s")
+    print(f"Success: {results.stats.successful}, Failed: {results.stats.failed}")
 
 
 if __name__ == "__main__":

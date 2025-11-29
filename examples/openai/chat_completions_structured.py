@@ -6,9 +6,8 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from callm import (
-    FilesConfig,
     RateLimitConfig,
-    process_api_requests_from_file,
+    process_requests,
 )
 from callm.providers import OpenAIProvider
 from callm.utils import pydantic_to_openai_response_format
@@ -38,7 +37,7 @@ response_format = pydantic_to_openai_response_format(CalculationResult, method="
 
 # Create requests with structured output format
 num_requests = 1_000
-requests_path = "data/openai_chat_structured_requests.jsonl"
+requests_path = "data/openai_completions_structured_requests.jsonl"
 with open(requests_path, mode="w", encoding="utf-8") as f:
     for i in range(num_requests):
         f.write(
@@ -64,18 +63,18 @@ with open(requests_path, mode="w", encoding="utf-8") as f:
 
 
 async def main() -> None:
-    await process_api_requests_from_file(
+    results = await process_requests(
         provider=provider,
-        requests_file=requests_path,
+        requests=requests_path,
         rate_limit=RateLimitConfig(
             max_requests_per_minute=RPM * 0.8,  # 80% of your limit
             max_tokens_per_minute=TPM * 0.8,  # 80% of your limit
         ),
-        files=FilesConfig(
-            save_file="data/openai_chat_structured_results.jsonl",
-            error_file="data/openai_chat_structured_errors.jsonl",
-        ),
+        output_path="data/openai_completions_structured_results.jsonl",
     )
+
+    print(f"Finished in {results.stats.duration_seconds:.2f}s")
+    print(f"Success: {results.stats.successful}, Failed: {results.stats.failed}")
 
 
 if __name__ == "__main__":
