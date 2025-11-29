@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
@@ -14,7 +13,7 @@ from tqdm import tqdm
 from callm.core.io import stream_jsonl, write_error, write_result
 from callm.core.models import (
     FilesConfig,
-    ProcessingResult,
+    ProcessingResults,
     ProcessingStats,
     RateLimitConfig,
     RequestResult,
@@ -444,205 +443,152 @@ async def _process_requests_internal(
     pbar.close()
 
 
-async def process_api_requests_from_file(
+async def process_requests(
     provider: BaseProvider,
-    requests_file: str,
+    requests: list[dict[str, Any]] | str,
     rate_limit: RateLimitConfig,
     retry: RetryConfig | None = None,
-    files: FilesConfig | None = None,
+    output_path: str | None = None,
+    errors_path: str | None = None,
     logging_level: int = 20,
-) -> None:
+) -> ProcessingResults:
     """
-    Process API requests from a JSONL file in parallel with rate limiting.
+    Process API requests from a list or JSONL file with in-memory results or writes to files.
 
-    This is the main entry point for the library. It reads requests from a
-    JSONL file, processes them in parallel while respecting rate limits,
-    and writes results and errors to output files.
-
-    Features:
-    - Parallel processing with configurable concurrency
-    - Rate limiting for both requests per minute (RPM) and tokens per minute (TPM)
-    - Automatic retry with exponential backoff for failed requests
-    - Separate output files for successes and failures
-    - Progress bar and structured logging
+    This function processes requests in parallel while respecting rate limits.
+    - If `output_path` is provided, results are written to disk (low memory usage).
+    - If `output_path` is not provided, results are returned in memory (higher memory usage).
 
     Args:
         provider (Provider): Provider implementation for the target API
-        requests_file (str): Path to input JSONL file with requests
+        requests (list[dict[str, Any]] | str): List of request dictionaries or path to a JSONL file
         rate_limit (RateLimitConfig): Rate limit configuration (RPM and TPM)
         retry (Optional[RetryConfig]): Optional retry configuration (uses defaults if None)
-        files (Optional[FilesConfig]): Optional file configuration (auto-generated if None)
+        output_path (Optional[str]): Optional path to save successful API responses (JSONL format)
+        errors_path (Optional[str]): Optional path to save failed requests and errors (JSONL format)
+            Only used if `output_path` is provided.
+            Defaults to `output_path` with "_errors" suffix
+            (e.g., "output_errors.jsonl") if not specified.
         logging_level (int): Loguru logging level (20=INFO, 10=DEBUG)
 
-    Raises:
-        ValueError: If file paths don't end with .jsonl
-        FileNotFoundError: If requests_file doesn't exist
+    Returns:
+        ProcessingResults: Object containing successes, failures, and statistics.
+                          Note: successes/failures lists will be empty if `output_path` is not used.
 
     Example:
-        >>> provider = OpenAIProvider(
-        ...     api_key="sk-...",
-        ...     model="gpt-4o",
-        ...     request_url="https://api.openai.com/v1/responses"
-        ... )
-        >>> await process_api_requests_from_file(
+        >>> # 1. In-memory list to in-memory results
+        >>> requests = [{"messages": [{"role": "user", "content": "Hello"}]}]
+        >>> result = await process_requests(
         ...     provider=provider,
-        ...     requests_file="requests.jsonl",
-        ...     rate_limit=RateLimitConfig(
-        ...         max_requests_per_minute=100,
-        ...         max_tokens_per_minute=50000
-        ...     )
+        ...     requests=requests,
+        ...     rate_limit=RateLimitConfig(5_000, 2_000_000)
+        ... )
+        >>>
+        >>> # 2. In-memory list to File output
+        >>> result = await process_requests(
+        ...     provider=provider,
+        ...     requests=requests,
+        ...     rate_limit=RateLimitConfig(5_000, 2_000_000),
+        ...     output_path="output.jsonl"
+        ... )
+        >>>
+        >>> # 3. File input to File output
+        >>> result = await process_requests(
+        ...     provider=provider,
+        ...     requests="input.jsonl",
+        ...     rate_limit=RateLimitConfig(5_000, 2_000_000),
+        ...     output_path="output.jsonl"
+        ... )
+        >>>
+        >>> # 4. File input to In-memory results
+        >>> result = await process_requests(
+        ...     provider=provider,
+        ...     requests="input.jsonl",
+        ...     rate_limit=RateLimitConfig(5_000, 2_000_000)
         ... )
     """
     _setup_logger(logging_level)
 
-    validate_jsonl_file(requests_file, "Requests file")
-    if not os.path.exists(requests_file):
-        raise FileNotFoundError(f"Requests file not found: {requests_file}")
+    request_iterator: Iterator[dict[str, Any]]
 
-    if files is None:
-        files = FilesConfig(
-            save_file=requests_file.replace(".jsonl", "_results.jsonl"),
-            error_file=requests_file.replace(".jsonl", "_errors.jsonl"),
-        )
+    if isinstance(requests, str):
+        request_iterator = stream_jsonl(requests)
+        try:
+            with open(requests, encoding="utf-8") as _f:
+                total_requests = sum(1 for _ in _f)
+        except Exception:
+            total_requests = 0
     else:
-        validate_jsonl_file(files.save_file, "Save file")
-        validate_jsonl_file(files.error_file, "Error file")
+        request_iterator = iter(requests)
+        total_requests = len(requests)
 
     retry = retry or RetryConfig()
 
-    # Get number of requests in file
-    try:
-        with open(requests_file, encoding="utf-8") as _f:
-            total_requests = sum(1 for _ in _f)
-    except Exception:
-        total_requests = 0
+    files = None
+    if output_path:
+        errors_path = errors_path or output_path.replace(".jsonl", "_errors.jsonl")
+        files = FilesConfig(output_path, errors_path)
+        validate_jsonl_file(files.save_file, "Save file")
+        validate_jsonl_file(files.error_file, "Error file")
+
+    # Initialize return containers
+    successes: list[RequestResult] = []
+    failures: list[RequestResult] = []
+    on_success = None
+    on_failure = None
+
+    if files is None:
+        # Memory output handlers
+        def on_success(entry: list[Any]) -> None:
+            """Capture successful result in memory instead of writing to file."""
+            request_data = entry[0]
+            response_data = entry[1]
+            metadata = entry[2] if len(entry) > 2 else None
+
+            successes.append(
+                RequestResult(
+                    request=request_data,
+                    response=response_data,
+                    error=None,
+                    metadata=metadata,
+                    attempts=1,
+                )
+            )
+
+        def on_failure(entry: list[Any]) -> None:
+            """Capture failed result in memory instead of writing to file."""
+            request_data = entry[0]
+            errors = entry[1]
+            metadata = entry[2] if len(entry) > 2 else None
+
+            error_msg = (
+                "; ".join(str(e) for e in errors) if isinstance(errors, list) else str(errors)
+            )
+
+            failures.append(
+                RequestResult(
+                    request=request_data,
+                    response=None,
+                    error=error_msg,
+                    metadata=metadata,
+                    attempts=1,
+                )
+            )
+
+        on_success = on_success
+        on_failure = on_failure
 
     status = StatusTracker()
     start_time = time.time()
 
     await _process_requests_internal(
         provider=provider,
-        request_iterator=stream_jsonl(requests_file),
+        request_iterator=request_iterator,
         total_requests=total_requests,
         rate_limit=rate_limit,
         retry=retry,
         status=status,
         files=files,
-    )
-
-    duration = time.time() - start_time
-    description = f"Results saved to {files.save_file}"
-    description += f" and {files.error_file}" if status.num_tasks_failed > 0 else ""
-    _log_summary(status, duration, output_description=description)
-
-
-async def process_api_requests(
-    provider: BaseProvider,
-    requests: list[dict[str, Any]],
-    rate_limit: RateLimitConfig,
-    retry: RetryConfig | None = None,
-    logging_level: int = 20,
-    max_batch_size: int = 10_000,
-) -> ProcessingResult:
-    """
-    Process API requests from a list with in-memory results.
-
-    This function processes requests in parallel while respecting rate limits and
-    returns results in memory. Perfect for small to medium batches and programmatic use.
-
-    For large batches (> 10,000 requests), use process_api_requests_from_file()
-    instead to avoid memory issues.
-
-    Args:
-        provider (Provider): Provider implementation for the target API
-        requests (list[dict[str, Any]]): List of request dictionaries
-        rate_limit (RateLimitConfig): Rate limit configuration (RPM and TPM)
-        retry (Optional[RetryConfig]): Optional retry configuration (uses defaults if None)
-        logging_level (int): Loguru logging level (20=INFO, 10=DEBUG)
-        max_batch_size (int): Maximum allowed batch size (default: 10,000)
-
-    Returns:
-        ProcessingResult: Object containing successes, failures, and statistics
-
-    Raises:
-        ValueError: If batch size exceeds max_batch_size
-
-    Example:
-        >>> requests = [
-        ...     {"messages": [{"role": "user", "content": "Hello"}]},
-        ...     {"messages": [{"role": "user", "content": "Hi there"}]},
-        ... ]
-        >>> result = await process_api_requests(
-        ...     provider=provider,
-        ...     requests=requests,
-        ...     rate_limit=RateLimitConfig(
-        ...         max_requests_per_minute=100,
-        ...         max_tokens_per_minute=50000
-        ...     )
-        ... )
-        >>> print(f"Processed: {result.stats.successful}/{result.stats.total_requests}")
-        >>> for success in result.successes:
-        ...     print(success.response)
-    """
-    _setup_logger(logging_level)
-
-    if len(requests) > max_batch_size:
-        raise ValueError(
-            f"Batch size {len(requests)} exceeds maximum {max_batch_size}. "
-            f"For large batches, use process_api_requests_from_file() instead."
-        )
-
-    retry = retry or RetryConfig()
-
-    # In-memory result collectors
-    successes: list[RequestResult] = []
-    failures: list[RequestResult] = []
-
-    # Memory output handlers
-    def on_success(entry: list[Any]) -> None:
-        """Capture successful result in memory instead of writing to file."""
-        request_data = entry[0]
-        response_data = entry[1]
-        metadata = entry[2] if len(entry) > 2 else None
-
-        successes.append(
-            RequestResult(
-                request=request_data,
-                response=response_data,
-                error=None,
-                metadata=metadata,
-                attempts=1,
-            )
-        )
-
-    def on_failure(entry: list[Any]) -> None:
-        """Capture failed result in memory instead of writing to file."""
-        request_data = entry[0]
-        errors = entry[1]
-        metadata = entry[2] if len(entry) > 2 else None
-
-        error_msg = "; ".join(str(e) for e in errors) if isinstance(errors, list) else str(errors)
-
-        failures.append(
-            RequestResult(
-                request=request_data,
-                response=None,
-                error=error_msg,
-                metadata=metadata,
-                attempts=1,
-            )
-        )
-
-    status = StatusTracker()
-    start_time = time.time()
-
-    await _process_requests_internal(
-        provider=provider,
-        request_iterator=iter(requests),
-        total_requests=len(requests),
-        rate_limit=rate_limit,
-        retry=retry,
-        status=status,
         on_success=on_success,
         on_failure=on_failure,
     )
@@ -650,9 +596,12 @@ async def process_api_requests(
     duration = time.time() - start_time
 
     # Log summary
-    _log_summary(status, duration, "Processing complete (in-memory)")
+    output_desc = (
+        f"Results saved to {files.save_file}" if files else "Processing complete (in-memory)"
+    )
+    _log_summary(status, duration, output_desc)
 
-    return ProcessingResult(
+    return ProcessingResults(
         successes=successes,
         failures=failures,
         stats=ProcessingStats(

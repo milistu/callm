@@ -99,7 +99,7 @@ class ProcessingStats:
 
 
 @dataclass
-class ProcessingResult:
+class ProcessingResults:
     """
     Results from parallel API processing.
 

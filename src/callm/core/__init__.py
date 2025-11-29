@@ -1,9 +1,8 @@
 """Core engine and utilities for parallel API processing."""
 
-from callm.core.engine import process_api_requests, process_api_requests_from_file
+from callm.core.engine import process_requests
 from callm.core.models import (
-    FilesConfig,
-    ProcessingResult,
+    ProcessingResults,
     ProcessingStats,
     RateLimitConfig,
     RequestResult,
@@ -14,14 +13,12 @@ from callm.core.retry import Backoff
 
 __all__ = [
     # Processing functions
-    "process_api_requests_from_file",
-    "process_api_requests",
+    "process_requests",
     # Configuration models
     "RateLimitConfig",
     "RetryConfig",
-    "FilesConfig",
     # Result models
-    "ProcessingResult",
+    "ProcessingResults",
     "ProcessingStats",
     "RequestResult",
     # Utilities
