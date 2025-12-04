@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from callm.providers.anthropic import AnthropicProvider
 from callm.providers.base import BaseProvider
 from callm.providers.cohere import CohereProvider
 from callm.providers.deepseek import DeepSeekProvider
@@ -18,6 +19,7 @@ _REGISTRY: dict[str, ProviderFactory] = {
     "voyageai": lambda **kwargs: VoyageAIProvider(**kwargs),
     "deepseek": lambda **kwargs: DeepSeekProvider(**kwargs),
     "gemini": lambda **kwargs: GeminiProvider(**kwargs),
+    "anthropic": lambda **kwargs: AnthropicProvider(**kwargs),
 }
 
 
