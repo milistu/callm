@@ -79,9 +79,12 @@ class OpenAIProvider(BaseProvider):
             return {"api-key": self.api_key}
         return {"Authorization": f"Bearer {self.api_key}"}
 
-    def estimate_input_tokens(self, request_json: dict[str, Any]) -> int:
+    async def estimate_input_tokens(
+        self, request_json: dict[str, Any], session: ClientSession | None = None
+    ) -> int:
         """
         Estimate input tokens using tiktoken.
+        Note: session parameter is unused - OpenAI uses local tokenizer.
 
         Supports multiple endpoint types with different counting logic:
         - chat/completions: Counts message tokens + formatting overhead
@@ -124,7 +127,9 @@ class OpenAIProvider(BaseProvider):
             return str(error.get("message") or error)
         return str(error)
 
-    def extract_usage(self, payload: dict[str, Any]) -> Usage | None:
+    def extract_usage(
+        self, payload: dict[str, Any], estimated_input_tokens: int | None = None
+    ) -> Usage | None:
         """
         Extract token usage from OpenAI response.
 

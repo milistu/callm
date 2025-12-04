@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from aiohttp import ClientSession
+
 from callm.providers.base import BaseProvider
 from callm.providers.models import Usage
 from callm.tokenizers.cohere import get_cohere_tokenizer, num_tokens_from_cohere_request
@@ -57,9 +59,12 @@ class CohereProvider(BaseProvider):
         except Exception as e:
             raise ValueError(f"Failed to initialize tokenizer for model '{model}': {e}") from e
 
-    def estimate_input_tokens(self, request_json: dict[str, Any]) -> int:
+    async def estimate_input_tokens(
+        self, request_json: dict[str, Any], session: ClientSession | None = None
+    ) -> int:
         """
         Estimate input tokens using Cohere's tokenizer.
+        Note: session parameter is unused - Cohere has local tokenizer.
 
         Supports the embed endpoint with various input formats:
         - Simple string array
@@ -67,6 +72,7 @@ class CohereProvider(BaseProvider):
 
         Args:
             request_json (dict[str, Any]): The request payload
+            session (Optional[ClientSession]): Aiohttp session for API-based counting.
 
         Returns:
             int: Estimated number of input tokens
@@ -107,7 +113,9 @@ class CohereProvider(BaseProvider):
 
         return None
 
-    def extract_usage(self, payload: dict[str, Any]) -> Usage | None:
+    def extract_usage(
+        self, payload: dict[str, Any], estimated_input_tokens: int | None = None
+    ) -> Usage | None:
         """
         Extract token usage from Cohere API response.
 

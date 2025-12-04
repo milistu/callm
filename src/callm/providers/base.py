@@ -193,15 +193,25 @@ class BaseProvider(ABC):
             return self.request_url.rstrip("/").split("/")[-1]
 
     @abstractmethod
-    def estimate_input_tokens(self, request_json: dict[str, Any]) -> int:
+    async def estimate_input_tokens(
+        self, request_json: dict[str, Any], session: ClientSession | None = None
+    ) -> int:
         """
         Estimate the number of input tokens for rate limit budgeting.
 
         This method must be implemented by each provider as token counting
         is provider-specific (different tokenizers, different logic).
 
+        For providers with local tokenizers (OpenAI, DeepSeek, etc.), the session
+        parameter is ignored and token counting is done locally.
+
+        For providers requiring API-based token counting (Gemini, Claude, etc.), the session
+        is used to make an async HTTP call to the token counting endpoint.
+
         Args:
             request_json (dict[str, Any]): The request payload
+            session (Optional[ClientSession]): Aiohttp session for API-based counting.
+                                              Required for providers like Gemini.
 
         Returns:
             int: Estimated number of input tokens (always >= 0)
@@ -235,7 +245,9 @@ class BaseProvider(ABC):
         ...
 
     @abstractmethod
-    def extract_usage(self, payload: dict[str, Any]) -> Usage | None:
+    def extract_usage(
+        self, payload: dict[str, Any], estimated_input_tokens: int | None = None
+    ) -> Usage | None:
         """
         Extract token usage metrics from a successful API response.
 
@@ -244,14 +256,11 @@ class BaseProvider(ABC):
 
         Args:
             payload (dict[str, Any]): The API response payload
+            estimated_input_tokens (Optional[int]): Pre-calculated input tokens from
+                estimate_input_tokens(). Useful for providers/endpoints that don't
+                return usage in the response (e.g., Gemini embeddings).
 
         Returns:
             Optional[Usage]: Usage object with token counts, or None if unavailable
-
-        Example:
-            >>> payload = {"usage": {"input_tokens": 10, "output_tokens": 20}}
-            >>> usage = provider.extract_usage(payload)
-            >>> usage.input_tokens
-            10
         """
         ...
