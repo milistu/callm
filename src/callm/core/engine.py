@@ -204,7 +204,7 @@ class APIRequest:
                 return
 
             # Extract usage metrics if available
-            usage = provider.extract_usage(payload)
+            usage = provider.extract_usage(payload, estimated_input_tokens=self.token_consumption)
             if usage:
                 status.total_input_tokens += usage.input_tokens
                 status.total_output_tokens += usage.output_tokens
@@ -390,10 +390,13 @@ async def _process_requests_internal(
                 else:
                     try:
                         request_json = next(request_iterator)
+                        token_consumption = await provider.estimate_input_tokens(
+                            request_json, session
+                        )
                         next_request = APIRequest(
                             task_id=next(generator),
                             request_json=request_json,
-                            token_consumption=provider.estimate_input_tokens(request_json),
+                            token_consumption=token_consumption,
                             attempts_left=retry.max_attempts,
                             metadata=request_json.pop("metadata", None),
                         )
