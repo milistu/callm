@@ -6,6 +6,7 @@ from typing import Any
 from callm.providers.base import BaseProvider
 from callm.providers.cohere import CohereProvider
 from callm.providers.deepseek import DeepSeekProvider
+from callm.providers.gemini import GeminiProvider
 from callm.providers.openai import OpenAIProvider
 from callm.providers.voyageai import VoyageAIProvider
 
@@ -16,6 +17,7 @@ _REGISTRY: dict[str, ProviderFactory] = {
     "cohere": lambda **kwargs: CohereProvider(**kwargs),
     "voyageai": lambda **kwargs: VoyageAIProvider(**kwargs),
     "deepseek": lambda **kwargs: DeepSeekProvider(**kwargs),
+    "gemini": lambda **kwargs: GeminiProvider(**kwargs),
 }
 
 
