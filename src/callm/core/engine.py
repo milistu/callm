@@ -8,7 +8,7 @@ from typing import Any
 
 from aiohttp import ClientSession
 from loguru import logger
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from callm.core.io import stream_jsonl, write_error, write_result
 from callm.core.models import (
