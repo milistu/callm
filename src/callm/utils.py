@@ -96,7 +96,7 @@ def validate_jsonl_file(filepath: str, file_type: str = "File") -> None:
 
 def pydantic_to_openai_response_format(
     model: type[BaseModel],
-    method: Literal["completions", "chat/completions", "responses"],
+    endpoint: Literal["completions", "chat/completions", "responses"],
     strict: bool = True,
 ) -> dict[str, Any]:
     """
@@ -104,7 +104,7 @@ def pydantic_to_openai_response_format(
 
     Args:
         model: The Pydantic model to convert
-        method: Explicitly specify "chat/completions", "completions" or "responses"
+        endpoint: Explicitly specify "chat/completions", "completions" or "responses"
         strict: Whether to include strict mode (required for Structured Outputs)
 
     Returns:
@@ -119,15 +119,15 @@ def pydantic_to_openai_response_format(
         "schema": json_schema_content,
         "strict": strict,
     }
-    if method in ["completions", "chat/completions"]:
+    if endpoint in ["completions", "chat/completions"]:
         return {
             "type": "json_schema",
             "json_schema": json_schema_spec,
         }
-    elif method == "responses":
+    elif endpoint == "responses":
         return {
             "type": "json_schema",
             **json_schema_spec,
         }
     else:
-        raise ValueError(f"Invalid method: {method}")
+        raise ValueError(f"Invalid endpoint: {endpoint}")
