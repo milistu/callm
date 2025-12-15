@@ -9,7 +9,7 @@ This directory contains examples demonstrating how to use callm for real-world L
 | [`quickstart/`](quickstart/) | Minimal examples to get started | First-time users |
 | [`data_extraction/`](data_extraction/) | Extract structured data from text | ETL pipelines, e-commerce |
 | [`embeddings/`](embeddings/) | Generate embeddings for search/RAG | Vector databases, search systems |
-| [`evaluation/`](evaluation/) | LLM-as-judge and quality scoring | ML pipelines, testing |
+| [`evaluation/`](evaluation/) | Multi-judge consensus evaluation | ML pipelines, testing |
 | [`synthetic_data/`](synthetic_data/) | Generate training and evaluation data | Dataset creation |
 | [`classification/`](classification/) | Sentiment analysis, content moderation | Content analysis |
 | [`translation/`](translation/) | Dataset and content translation | Multilingual datasets |
@@ -76,7 +76,7 @@ Use these as starting points—adjust based on your API tier:
 | Gemini | 1,000 | 1,000,000 | Free tier: 15 RPM |
 | DeepSeek | No limit* | No limit* | *Be reasonable, ~5,000 RPM suggested |
 | Cohere | 2,000 | — | No TPM limit |
-| Voyage AI | 2,000 | 3,000,000 | [Rate limits](https://docs.voyageai.com/docs/rate-limits) |
+| Voyage AI | 2,000 | 16,000,000 | [Rate limits](https://docs.voyageai.com/docs/rate-limits) |
 
 **Pro tip:** Use 80% of your limits to leave headroom:
 ```python

@@ -156,7 +156,7 @@ Explore real-world use cases in the [`examples/`](examples/) directory:
 |----------|-------------|
 | [**Data Extraction**](examples/data_extraction/) | Extract structured data from product listings, invoices |
 | [**Embeddings**](examples/embeddings/) | Generate embeddings for RAG and semantic search |
-| [**Evaluation**](examples/evaluation/) | LLM-as-judge scoring at scale |
+| [**Evaluation**](examples/evaluation/) | Multi-judge consensus evaluation |
 | [**Synthetic Data**](examples/synthetic_data/) | Generate training data and evaluation sets |
 | [**Classification**](examples/classification/) | Sentiment analysis, content moderation |
 | [**Translation**](examples/translation/) | Dataset translation for multilingual evaluation |
