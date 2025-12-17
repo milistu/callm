@@ -1,0 +1,36 @@
+changelog:
+  exclude:
+    labels:
+      - "skip-changelog"
+    authors:
+      - "dependabot"
+      - "coderabbitai"
+  categories:
+    - title: "💣 Breaking Changes"
+      labels:
+        - "breaking"
+        - "breaking-change"
+    - title: "✨ Features"
+      labels:
+        - "feature"
+        - "enhancement"
+    - title: "🐞 Bug Fixes"
+      labels:
+        - "bug"
+        - "fix"
+    - title: "📚 Documentation"
+      labels:
+        - "documentation"
+        - "docs"
+    - title: "🔧 Maintenance"
+      labels:
+        - "chore"
+        - "refactor"
+        - "test"
+        - "ci"
+    - title: "📦 Dependencies"
+      labels:
+        - "dependencies"
+    - title: "Other Changes"
+      labels:
+        - "*"
