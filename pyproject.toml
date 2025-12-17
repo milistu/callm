@@ -1,5 +1,5 @@
 [project]
-name = "callm"
+name = "callm-py"
 version = "0.1.0"
 description = "Calmly call LLMs in parallel, within rate limits."
 readme = "README.md"

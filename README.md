@@ -4,8 +4,8 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/callm/"><img src="https://img.shields.io/pypi/v/callm?color=blue&label=PyPI" alt="PyPI version"></a>
-  <a href="https://pypi.org/project/callm/"><img src="https://img.shields.io/pypi/pyversions/callm" alt="Python versions"></a>
+  <a href="https://pypi.org/project/callm-py/"><img src="https://img.shields.io/pypi/v/callm-py?color=blue&label=PyPI" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/callm-py/"><img src="https://img.shields.io/pypi/pyversions/callm-py" alt="Python versions"></a>
   <a href="https://github.com/milistu/callm/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
 
 
@@ -39,7 +39,7 @@ Building LLM-powered applications often means processing **thousands of API requ
 ## Installation
 
 ```bash
-pip install callm
+pip install callm-py
 ```
 
 **From source:**
